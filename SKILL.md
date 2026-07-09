@@ -1,6 +1,6 @@
 ---
 name: gemini-designer
-description: Use Gemini as the required external design advisor when a task needs UI critique, UX critique, interaction-flow review, design imagery markdown, art direction, visual hierarchy judgment, design-system fit, color/type/layout suggestions, HTML mockups, SVG icons, handwritten SVG wordmarks, or file-based feedback on existing UI. Trigger on requests like "design a page", "generate design imagery", "give design advice", "optimize this UI", "improve UX", "optimize user flow", "review interaction", "check usability", "reduce friction", "review this design", "create an icon", "suggest colors", "UI mockup", "visual direction", "lettering", "wordmark", "handwritten logo", or when another agent needs a second opinion on visual or interaction quality.
+description: Use Gemini as the required external design advisor when a task needs UI critique, UX critique, component-choice review, interaction-flow review, design imagery markdown, art direction, visual hierarchy judgment, design-system fit, color/type/layout suggestions, HTML mockups, SVG icons, handwritten SVG wordmarks, or file-based feedback on existing UI. Trigger on requests like "design a page", "generate design imagery", "give design advice", "optimize this UI", "improve UX", "optimize user flow", "review interaction", "check usability", "reduce friction", "choose the right component", "review this design", "create an icon", "suggest colors", "UI mockup", "visual direction", "lettering", "wordmark", "handwritten logo", or when another agent needs a second opinion on visual or interaction quality.
 ---
 
 # Gemini Designer — UI, UX, and Visual Design Advisor
@@ -13,7 +13,7 @@ Use Gemini as an external advisor for visual design, UI finish, UX task flow, in
 - When this skill is used, call `gemini-designer` before giving UI advice, UX advice, design imagery, art direction, critique, visual advice, HTML, or SVG output. Do not write those deliverables from the agent's own judgment.
 - Call `gemini-designer` directly in the normal path. If the command is missing, install it silently with the bundled `scripts/install_cli` script, then retry.
 - For visual/UI review of existing files, use `gemini-designer ui`.
-- For UX, task-model, interaction-flow, friction, or state-behavior review, use `gemini-designer ux`.
+- For UX, task-model, component-choice, interaction-flow, friction, or state-behavior review, use `gemini-designer ux`.
 - For requests that need both UI and UX review, run `ui` and `ux` independently. You may use the CLI's comma-separated form, such as `gemini-designer ui,ux ...`, or run separate commands in parallel.
 - For broad art direction, use `gemini-designer direction`. It may include files as background context.
 - For design imagery markdown, use `gemini-designer direction` and read the generated markdown before responding.
@@ -48,7 +48,7 @@ Each command has its own built-in prompt. Choose the right command and pass the 
 Commands:
 
 - `gemini-designer ui` — Use for visual/UI review: layout, hierarchy, density, typography, color, spacing, surfaces, shadows, component appearance, visual consistency, and UI finish. It may include `-f` and `-i` as reference context, and requires a readable markdown file name with `-o`.
-- `gemini-designer ux` — Use for UX and interaction review: task model, flow, friction, control structure, affordance, recoverability, validation, navigation clarity, accessibility when it affects usability, and loading/error/empty/success/disabled/hover/focus/active states. It may include `-f` and `-i` as reference context, and requires a readable markdown file name with `-o`.
+- `gemini-designer ux` — Use for UX and interaction review: task model, component choice, flow, friction, control structure, affordance, recoverability, validation, navigation clarity, accessibility when it affects usability, and loading/error/empty/success/disabled/hover/focus/active states. It may include `-f` and `-i` as reference context, and requires a readable markdown file name with `-o`.
 - `gemini-designer ui,ux` — Use when the user wants both visual/UI and UX review. The CLI runs independent markdown review commands and writes one output per command.
 - `gemini-designer direction` — Use before implementation when the task needs a stronger idea, art direction, visual metaphor, design imagery markdown, or high-level design direction. Files are optional. Always provide a readable markdown file name with `-o`.
 - `gemini-designer html` — Use for a new standalone HTML mockup or concept page. It may include `-f` and `-i` as reference context, but do not use it to directly revise an existing project file.
@@ -104,6 +104,7 @@ For `ui`, prioritize visible/rendered context:
 For `ux`, visual files are not enough. Include context that defines the user's task and state transitions:
 
 - Component files that define controls, states, validation, and visible behavior
+- Existing component-library files or nearby examples when the question depends on choosing the right control pattern
 - Hooks, context, route, form, schema, or data-loading files that control the flow
 - Copy/config files that affect labels, errors, confirmations, empty states, or success states
 - Sequential images such as `-i step1.png -i step2.png` when the experience spans multiple states
@@ -159,13 +160,14 @@ The built-in `ui` prompt asks Gemini to:
 
 The built-in `ux` prompt asks Gemini to:
 
-- focus on natural task model, cognitive load, interaction friction, control structure, affordance, recoverability, validation, navigation clarity, accessibility when it affects usability, and visible state feedback
+- focus on natural task model, component choice, cognitive load, interaction friction, control structure, affordance, recoverability, validation, navigation clarity, accessibility when it affects usability, and visible state feedback
+- judge whether the chosen component or control pattern matches the task, such as using an editable tag/chip editor for tag editing instead of separate add and delete inputs
 - evaluate loading, error, empty, success, disabled, hover, focus, and active states when relevant
 - avoid pure visual polish unless it directly harms usability
 - avoid product strategy, feature bloat, gamification, broad repositioning, code review, CSS hygiene, technical architecture, and file-structure critique
 - work within the existing product scope and user goal
-- provide concrete structural, interaction, copy, state, or layout changes
-- ask for missing state logic, routing, component code, form validation, or sequential screenshots instead of guessing when reliable UX judgment is not possible
+- provide concrete structural, component-pattern, interaction, copy, state, or layout changes
+- ask for missing state logic, routing, component code, component-library examples, form validation, or sequential screenshots instead of guessing when reliable UX judgment is not possible
 
 ## Parallel Review
 
@@ -176,9 +178,9 @@ For UI + UX review:
 1. Run `gemini-designer ui` and `gemini-designer ux` separately, or run `gemini-designer ui,ux` so the CLI writes independent outputs.
 2. Pass the same user goal to both commands without adding agent-authored visual styles, interaction metaphors, palettes, layouts, or UX solutions.
 3. Give `ui` screenshots, rendered previews, style tokens, theme files, and visible component files.
-4. Give `ux` component logic, state files, routing files, form/validation logic, and sequential screenshots when available.
+4. Give `ux` component logic, state files, routing files, component-library examples, form/validation logic, and sequential screenshots when available.
 5. After both outputs return, synthesize them for the user:
-   - Present UX first: task model, flow, state feedback, friction, and recoverability.
+   - Present UX first: task model, component choice, flow, state feedback, friction, and recoverability.
    - Present UI second: hierarchy, typography, spacing, polish, and visual consistency.
    - If UX and UI advice conflict, prioritize the UX structural decision first and explicitly note which UI advice only applies if the affected element remains.
 
@@ -270,7 +272,7 @@ For generated HTML/SVG, treat `output_path` plus `integrity=passed` as the norma
 2. Run `gemini-designer` with a readable `-o` path and get an `output_path` before writing the final answer or file.
 3. Use the user's wording as the task text whenever possible. Add only factual context needed to identify files, product scope, or constraints the user actually gave.
 4. For visual/UI review, call `gemini-designer ui`.
-5. For UX, task-model, interaction-flow, friction, or state-feedback review, call `gemini-designer ux`.
+5. For UX, task-model, component-choice, interaction-flow, friction, or state-feedback review, call `gemini-designer ux`.
 6. For combined UI + UX review, run `gemini-designer ui,ux` or run both commands independently and synthesize the outputs.
 7. For design imagery markdown or visual direction, call `gemini-designer direction`.
 8. For new HTML/SVG design drafts, call `gemini-designer html` or `gemini-designer svg`; include `-f` or `-i` when reference context matters.

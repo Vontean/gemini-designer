@@ -1,6 +1,6 @@
 # Gemini Designer
 
-Gemini Designer is a design advisor skill for agents. It helps with UI critique, UX critique, interaction-flow review, design direction, HTML mockups, SVG icons, handwritten wordmarks, and file-based design feedback.
+Gemini Designer is a design advisor skill for agents. It helps with UI critique, UX critique, component-choice review, interaction-flow review, design direction, HTML mockups, SVG icons, handwritten wordmarks, and file-based design feedback.
 
 The skill asks Gemini for design judgment through the bundled `gemini-designer` CLI, then lets the main agent decide how to apply the advice in the current workspace.
 
@@ -40,7 +40,7 @@ Do not commit API keys or local config files. The repository ignores common loca
 
 - Gemini is stateless. It only sees the current prompt, files passed with `-f`, and images passed with `-i`.
 - For visual/UI review, use `gemini-designer ui`.
-- For UX, task-flow, interaction, friction, or state-feedback review, use `gemini-designer ux`.
+- For UX, component-choice, task-flow, interaction, friction, or state-feedback review, use `gemini-designer ux`.
 - For combined UI + UX review, use `gemini-designer ui,ux` or run `ui` and `ux` separately.
 - For broad art direction or design imagery markdown, use `gemini-designer direction`.
 - For new standalone HTML mockups, use `gemini-designer html`.

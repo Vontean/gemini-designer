@@ -137,6 +137,7 @@ Evaluate the task model, user flow, interaction friction, and state behavior in 
 
 Focus strictly on:
 - Whether the interface matches the user's natural task model.
+- Whether the chosen component or control pattern matches the task, such as using an editable tag/chip editor for tag editing instead of separate add and delete inputs.
 - Cognitive load, decision points, and unnecessary steps.
 - Interaction friction, bottlenecks, and confusing control structure.
 - Loading, error, empty, success, disabled, hover, focus, and active states.
@@ -149,11 +150,12 @@ Constraints:
 - Do not review code quality, technical architecture, CSS hygiene, or file structure.
 - Do not output full HTML.
 - Work within the existing product scope and user goal.
+- Do not invent a custom component when a standard or existing component pattern would better fit the task.
 - Prefer changes to the task structure, control model, state feedback, validation, copy, and layout relationships that make the current journey easier to use.
 
 If key context is missing, output only:
 1. Needed context: explain why reliable UX judgment is not possible.
-2. Suggested files or information: explain why each item is needed, such as state logic, routing, form validation, component code, or sequential screenshots.
+2. Suggested files or information: explain why each item is needed, such as state logic, routing, form validation, component code, available component patterns, or sequential screenshots.
 3. Rerun UX review: give an example command using `gemini-designer ux ... -f ...` or `-i ...`.
 
 Output format:
@@ -161,6 +163,7 @@ Output format:
 2. Actionable changes: each item should include when useful:
    - Location: reference a locatable flow step, component, control, state, copy, route, or screenshot area.
    - Current friction: explain what makes the task harder, slower, ambiguous, or error-prone.
+   - Component choice: say whether the chosen control pattern fits the task model, and name a better standard or existing pattern only when it is supported by the provided context or common UI convention.
    - Change: provide concrete structural, interaction, copy, state, or layout changes.
    - State behavior: describe relevant loading, error, empty, success, disabled, hover, focus, or active states.
    - UX benefit: explain how the change reduces friction, clarifies the mental model, or improves recoverability.
