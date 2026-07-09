@@ -1,8 +1,8 @@
 # Gemini Designer
 
-Gemini Designer is a visual-design advisor skill for agents. It helps with design direction, UI critique, HTML mockups, SVG icons, handwritten wordmarks, and file-based visual feedback.
+Gemini Designer is a design advisor skill for agents. It helps with UI critique, UX critique, interaction-flow review, design direction, HTML mockups, SVG icons, handwritten wordmarks, and file-based design feedback.
 
-The skill asks Gemini for visual judgment through the bundled `gemini-designer` CLI, then lets the main agent decide how to apply the advice in the current workspace.
+The skill asks Gemini for design judgment through the bundled `gemini-designer` CLI, then lets the main agent decide how to apply the advice in the current workspace.
 
 ## Install
 
@@ -18,7 +18,7 @@ You can also install it directly from a terminal:
 npx skills add oil-oil/gemini-designer
 ```
 
-After installation, agents should use the `gemini-designer` skill when a task needs external visual design judgment.
+After installation, agents should use the `gemini-designer` skill when a task needs external design judgment.
 
 ## Authorization
 
@@ -39,12 +39,14 @@ Do not commit API keys or local config files. The repository ignores common loca
 ## What Agents Should Know
 
 - Gemini is stateless. It only sees the current prompt, files passed with `-f`, and images passed with `-i`.
-- For existing UI, use `gemini-designer advise`.
+- For visual/UI review, use `gemini-designer ui`.
+- For UX, task-flow, interaction, friction, or state-feedback review, use `gemini-designer ux`.
+- For combined UI + UX review, use `gemini-designer ui,ux` or run `ui` and `ux` separately.
 - For broad art direction or design imagery markdown, use `gemini-designer direction`.
 - For new standalone HTML mockups, use `gemini-designer html`.
 - For SVG icons, simple illustrations, and single handwritten wordmarks, use `gemini-designer svg`.
 - Pass complete relevant files when Gemini needs to judge an existing design.
-- Pass screenshots or visual references with `-i` when the visible result matters.
+- Pass screenshots or visual references with `-i` when the visible result or state sequence matters.
 - Do not ask Gemini to patch project files directly. Use its advice, then apply the changes in the workspace.
 
 ## CLI
@@ -58,13 +60,17 @@ gemini-designer
 Typical examples:
 
 ```bash
-gemini-designer advise "给这个页面提视觉设计建议" -f ./design.html -o design-page-advice.md
+gemini-designer ui "给这个页面提视觉/UI设计建议" -f ./design.html -o design-page-ui.md
+gemini-designer ux "评审这个页面的任务流、交互摩擦和状态反馈" -f ./design.html -o design-page-ux.md
+gemini-designer ui,ux "同时从 UI 和 UX 角度评审这个标签编辑组件" -f ./TagEditor.tsx -o tag-editor-review.md
 gemini-designer direction "给这个产品生成设计意象 markdown" -o product-design-imagery.md
 gemini-designer html "生成一个完整的产品页面设计稿" -f ./brief.md -o ./designs/product-page.html
 gemini-designer svg "为 Museon 生成一个手写 SVG 字标" -o museon-wordmark.svg
 ```
 
 Bare output filenames are saved under `.gemini-designer/` in the current workspace.
+
+For multi-command markdown review, a single `-o` value is suffixed per command. For example, `-o tag-editor-review.md` writes `tag-editor-review-ui.md` and `tag-editor-review-ux.md`.
 
 ## Repository Layout
 

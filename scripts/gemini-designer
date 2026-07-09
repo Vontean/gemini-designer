@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import concurrent.futures
 import datetime as dt
 import json
 import mimetypes
@@ -37,7 +38,7 @@ DEFAULT_IMAGE_FORMAT = "webp"
 DEFAULT_IMAGE_WEBP_LOSSLESS = True
 DEFAULT_IMAGE_WEBP_QUALITY = 86
 DEFAULT_IMAGE_MAX_LONG_EDGE = 2200
-READABLE_OUTPUT_REQUIRED_COMMANDS = {"advise", "direction"}
+READABLE_OUTPUT_REQUIRED_COMMANDS = {"ui", "ux", "direction"}
 HTML_FORBIDDEN_PATTERNS = [
     (
         "file_url",
@@ -82,46 +83,89 @@ COMMON_RULES = """General context:
 
 
 COMMAND_PROMPTS = {
-    "advise": """Role:
-You are an independent visual design advisor.
+    "ui": """Role:
+You are an expert visual and UI designer.
 
 Task:
-Give visual design optimization advice based on the user goal, file contents, and image contents. Focus on the overall impression, design imagery, reading rhythm, information hierarchy, emotional tone, UI finish, and user feeling.
+Critique and optimize the visual execution of the provided UI context.
+
+Focus strictly on:
+- Information hierarchy and reading rhythm.
+- Typography scale, weight, line-height, and density.
+- Color harmony, contrast, visual weight, and brand fit.
+- Spacing, alignment, borders, shadows, surfaces, and UI finish.
+- Component appearance, visual consistency, and emotional tone.
 
 Constraints:
-- Do not pick code issues just to sound strict.
+- Do not review code quality, CSS hygiene, technical debt, file structure, or implementation architecture.
+- Do not suggest new product features, business logic changes, or interaction-flow redesign unless a visual issue makes the current UI unusable.
+- Do not output full HTML.
 - Do not restate the file contents.
 - Do not try to prove the current solution is correct.
-- Do not output full HTML.
 - Do not suggest rewriting the entire page.
 - Do not suggest that the main agent create a separate component set, style-token system, layout system, or visual language.
-- Do not make CSS hygiene or technical debt the main issue.
 - Do not overturn the existing style unless the provided files show that the style cannot support the goal.
 - Do not suggest unrelated decorative additions.
 - You may not know what components exist in the project. Based only on provided files, generally remind the main agent to look for and reuse existing components, classes, selectors, tokens, variables, and style patterns.
 - If reusable objects are clearly visible in the provided files, name them. If they are not visible, do not invent component names.
-- If key context is missing, such as an incomplete target file, missing design rules, missing tokens/CSS, missing related visible components, or missing product goals, ask for more context first instead of forcing design advice.
-- When information is insufficient, do not guess. State exactly what is missing and what files or information are needed.
 - Turn design insight into design expression whenever possible. Prefer UI structure, state examples, visual hierarchy, module relationships, component variants, or interaction demos over explanatory prose.
 - Visual design does not need to fill every area. Strong visual treatment should serve key actions, brand memory, and key content entry points; other areas should stay quiet, stable, and easy to scan.
-- Look for places where animation, SVG, or material treatment can improve the experience, such as key state feedback, brand memory, content entry points, or complex relationship expression. If it would only decorate, disrupt scanning, or add maintenance burden, do not suggest it.
-- Keep the answer concrete and easy to implement.
+- Look for places where animation, SVG, or material treatment can improve the interface, such as key state feedback, brand memory, content entry points, or complex relationship expression. If it would only decorate, disrupt scanning, or add maintenance burden, do not suggest it.
+- Give concrete visual recommendations that can be implemented directly.
 
 If key context is missing, output only:
-1. Needed context: explain why reliable judgment is not possible.
+1. Needed context: explain why reliable UI judgment is not possible.
 2. Suggested files or information: explain why each item is needed.
-3. Rerun advice: give an example command using `gemini-designer advise ... -f ...` or `-i ...`.
+3. Rerun UI review: give an example command using `gemini-designer ui ... -f ...` or `-i ...`.
 
 Output format:
-1. Issues with the largest visual impact: order by importance, and explain evidence and impact.
+1. Issues with the largest UI impact: order by importance, and explain evidence and impact.
 2. Actionable changes: each item should include when useful:
    - Location: reference a locatable section, component, copy, selector, class, token, or screenshot area.
    - Reuse reminder: remind the main agent to first look for and reuse existing components, classes, selectors, tokens, variables, or style patterns; name reusable objects only when they are clearly visible in the files.
-   - Change: provide concrete values, hierarchy, spacing, colors, type, shadow, border, state, or layout guidance.
+   - Change: provide concrete hierarchy, spacing, color, type, shadow, border, state, or layout guidance.
    - Pseudocode: when useful, include pseudocode, a CSS snippet, or a JSX structure snippet to explain the change; use enough length to make the change clear, but do not output a full file.
-   - Visual benefit: explain how the change improves impression, hierarchy, rhythm, or consistency.
-   - Risk: point out possible visual or interaction risks.
-3. Do not change: only list specific areas, components, tokens, copy, visual traits, or interaction states that should be preserved, and explain why. Do not repeat broad design-direction summaries.
+   - UI benefit: explain how the change improves impression, hierarchy, rhythm, or consistency.
+   - Risk: point out possible visual risks.
+3. Do not change: only list specific areas, components, tokens, copy, visual traits, or states that should be preserved, and explain why. Do not repeat broad design-direction summaries.
+""",
+    "ux": """Role:
+You are an expert UX and interaction designer.
+
+Task:
+Evaluate the task model, user flow, interaction friction, and state behavior in the provided context.
+
+Focus strictly on:
+- Whether the interface matches the user's natural task model.
+- Cognitive load, decision points, and unnecessary steps.
+- Interaction friction, bottlenecks, and confusing control structure.
+- Loading, error, empty, success, disabled, hover, focus, and active states.
+- Affordance, recoverability, validation, navigation clarity, and accessibility when it affects usability.
+- Microcopy that helps users understand what happened, what they can do, and what happens next.
+
+Constraints:
+- Do not critique pure visual styling such as colors, fonts, shadows, or corner radius unless it directly harms usability or affordance.
+- Do not suggest generic product strategy, new business features, gamification, onboarding campaigns, or broad repositioning.
+- Do not review code quality, technical architecture, CSS hygiene, or file structure.
+- Do not output full HTML.
+- Work within the existing product scope and user goal.
+- Prefer changes to the task structure, control model, state feedback, validation, copy, and layout relationships that make the current journey easier to use.
+
+If key context is missing, output only:
+1. Needed context: explain why reliable UX judgment is not possible.
+2. Suggested files or information: explain why each item is needed, such as state logic, routing, form validation, component code, or sequential screenshots.
+3. Rerun UX review: give an example command using `gemini-designer ux ... -f ...` or `-i ...`.
+
+Output format:
+1. UX issues by task impact: order by the user's task, and explain evidence and impact.
+2. Actionable changes: each item should include when useful:
+   - Location: reference a locatable flow step, component, control, state, copy, route, or screenshot area.
+   - Current friction: explain what makes the task harder, slower, ambiguous, or error-prone.
+   - Change: provide concrete structural, interaction, copy, state, or layout changes.
+   - State behavior: describe relevant loading, error, empty, success, disabled, hover, focus, or active states.
+   - UX benefit: explain how the change reduces friction, clarifies the mental model, or improves recoverability.
+   - Risk: point out possible tradeoffs or edge cases.
+3. Do not change: only list specific flows, controls, copy, states, or task assumptions that should be preserved, and explain why.
 """,
     "direction": """Role:
 You are a visual design director.
@@ -204,6 +248,40 @@ OUTPUT_TYPES = {
     "html": "html",
     "svg": "svg",
 }
+VALID_COMMANDS = set(COMMAND_PROMPTS)
+
+
+def parse_command_list(command_text: str) -> list[str]:
+    commands = [part.strip() for part in re.split(r"[,+]", command_text) if part.strip()]
+    if not commands:
+        fail(
+            "invalid_args",
+            "Missing command.",
+            "Use a command such as ui, ux, direction, html, or svg.",
+            code=2,
+        )
+    unknown = [command for command in commands if command not in VALID_COMMANDS]
+    if unknown:
+        fail(
+            "invalid_args",
+            f"Unknown command: {', '.join(unknown)}",
+            f"Valid commands: {', '.join(sorted(VALID_COMMANDS))}.",
+            code=2,
+        )
+    seen = set()
+    unique_commands = []
+    for command in commands:
+        if command not in seen:
+            unique_commands.append(command)
+            seen.add(command)
+    if len(unique_commands) > 1 and any(command in OUTPUT_TYPES for command in unique_commands):
+        fail(
+            "invalid_args",
+            "Multiple commands are only supported for markdown review commands.",
+            "Run html or svg as a separate command.",
+            code=2,
+        )
+    return unique_commands
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -211,17 +289,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         prog="gemini-designer",
         description="Ask Gemini Designer through one stable CLI.",
         epilog=(
-            "Commands: advise = visual advice, optionally with -f; "
+            "Commands: ui = visual/UI review, optionally with -f or -i; "
+            "ux = interaction and task-flow review, optionally with -f or -i; "
             "direction = broad art direction, optionally with -f; "
             "html = new standalone HTML, optionally with -f; "
             "svg = new standalone SVG, optionally with -f; "
+            "use comma-separated markdown review commands such as ui,ux to run them together; "
             "Debug only: gemini-designer auth status shows whether local authorization is configured."
         ),
     )
     parser.add_argument(
         "command",
-        choices=sorted(COMMAND_PROMPTS),
-        help="Design task command.",
+        help="Design task command, or comma-separated markdown review commands such as ui,ux.",
     )
     parser.add_argument(
         "task",
@@ -259,14 +338,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Write the assembled prompt instead of calling Gemini.",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    args.commands = parse_command_list(args.command)
+    return args
 
 
 def require_readable_output(args: argparse.Namespace) -> None:
-    if args.command in READABLE_OUTPUT_REQUIRED_COMMANDS and not args.out:
+    missing = [command for command in args.commands if command in READABLE_OUTPUT_REQUIRED_COMMANDS]
+    if missing and not args.out:
         fail(
             "missing_output",
-            f"`{args.command}` requires -o with a readable markdown file name.",
+            f"`{', '.join(missing)}` requires -o with a readable markdown file name.",
             f"Use: gemini-designer {args.command} \"your task\" -o readable-name.md",
         )
 
@@ -569,13 +651,14 @@ def build_image_manifest(images: Iterable[dict[str, object]]) -> str:
 
 def build_prompt(
     args: argparse.Namespace,
+    command: str,
     max_chars: int,
     images: list[dict[str, object]],
 ) -> tuple[str, list[tuple[pathlib.Path, str]]]:
     files = [read_file(path) for path in args.file]
     prompt_parts = [
         COMMON_RULES.strip(),
-        COMMAND_PROMPTS[args.command].strip(),
+        COMMAND_PROMPTS[command].strip(),
     ]
 
     if files:
@@ -602,11 +685,12 @@ def build_prompt(
 
 
 def original_prompt_appendix(
+    command: str,
     args: argparse.Namespace,
     files: list[tuple[pathlib.Path, str]],
     images: list[dict[str, object]],
 ) -> str:
-    if args.command not in READABLE_OUTPUT_REQUIRED_COMMANDS:
+    if command not in READABLE_OUTPUT_REQUIRED_COMMANDS:
         return ""
 
     task = args.task.strip().replace("```", "'''")
@@ -638,9 +722,19 @@ def default_output_path(command: str, output_dir: pathlib.Path) -> pathlib.Path:
     return output_dir / f"{timestamp}-{command}.{output_extension(command)}"
 
 
-def resolve_output_path(args: argparse.Namespace, output_dir: pathlib.Path) -> pathlib.Path:
+def suffix_output_path(path: pathlib.Path, command: str) -> pathlib.Path:
+    suffix = path.suffix or ".md"
+    return path.with_name(f"{path.stem}-{command}{suffix}")
+
+
+def resolve_output_path(
+    args: argparse.Namespace,
+    command: str,
+    output_dir: pathlib.Path,
+    multiple: bool,
+) -> pathlib.Path:
     if not args.out:
-        return default_output_path(args.command, output_dir)
+        return default_output_path(command, output_dir)
     requested = pathlib.Path(args.out).expanduser()
     has_directory = (
         requested.is_absolute()
@@ -648,8 +742,9 @@ def resolve_output_path(args: argparse.Namespace, output_dir: pathlib.Path) -> p
         or (os.altsep is not None and os.altsep in args.out)
     )
     if has_directory:
-        return requested
-    return output_dir / requested
+        return suffix_output_path(requested, command) if multiple else requested
+    output_path = output_dir / requested
+    return suffix_output_path(output_path, command) if multiple else output_path
 
 
 def system_prompt(command: str) -> str:
@@ -662,7 +757,11 @@ def system_prompt(command: str) -> str:
         )
     if command == "svg":
         return "You are an excellent icon and simple illustration designer. Output only valid SVG source."
-    return "You are an independent visual design advisor. Respond in the same language as the user goal."
+    if command == "ux":
+        return "You are an independent UX and interaction design advisor. Respond in the same language as the user goal."
+    if command == "direction":
+        return "You are an independent visual design director. Respond in the same language as the user goal."
+    return "You are an independent visual and UI design advisor. Respond in the same language as the user goal."
 
 
 def strip_code_fence(content: str) -> str:
@@ -877,12 +976,14 @@ def request_gemini(
 
 
 def run_gemini(
+    command: str,
     prompt: str,
     args: argparse.Namespace,
     out_path: pathlib.Path,
     config: dict[str, object],
     images: list[dict[str, object]],
     files: list[tuple[pathlib.Path, str]],
+    multiple: bool,
 ) -> None:
     _, api_key = read_api_key(config)
     if not api_key:
@@ -899,8 +1000,8 @@ def run_gemini(
             f"Could not create output directory: {out_path.parent}",
             str(error),
         )
-    content = request_gemini(prompt, args.command, config, api_key, images)
-    content += original_prompt_appendix(args, files, images)
+    content = request_gemini(prompt, command, config, api_key, images)
+    content += original_prompt_appendix(command, args, files, images)
     try:
         out_path.write_text(content)
     except OSError as error:
@@ -909,8 +1010,9 @@ def run_gemini(
             f"Could not write output file: {out_path}",
             str(error),
         )
-    print(f"output_path={out_path}")
-    if args.command in OUTPUT_TYPES:
+    label = f"[{command}]" if multiple else ""
+    print(f"output_path{label}={out_path}")
+    if command in OUTPUT_TYPES:
         print("integrity=passed")
 
 
@@ -921,6 +1023,7 @@ def main(argv: list[str]) -> int:
     config = load_config()
     args = parse_args(argv)
     require_readable_output(args)
+    multiple = len(args.commands) > 1
     try:
         max_chars = args.max_chars if args.max_chars is not None else int(config["max_chars"])
     except (TypeError, ValueError):
@@ -930,24 +1033,50 @@ def main(argv: list[str]) -> int:
             "Fix ~/.config/gemini-designer/config.toml or pass --max-chars.",
         )
     images = [read_image(path, config) for path in args.image]
-    prompt, files = build_prompt(args, max_chars, images)
     output_dir = resolve_path(config["output_dir"])
-    out_path = resolve_output_path(args, output_dir)
+    tasks = []
+    for command in args.commands:
+        prompt, files = build_prompt(args, command, max_chars, images)
+        out_path = resolve_output_path(args, command, output_dir, multiple)
+        tasks.append((command, prompt, files, out_path))
 
     if args.dry_run:
-        try:
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(prompt)
-        except OSError as error:
-            fail(
-                "output_write_failed",
-                f"Could not write dry-run prompt file: {out_path}",
-                str(error),
-            )
-        print(f"prompt_path={out_path}")
+        for command, prompt, _, out_path in tasks:
+            try:
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(prompt)
+            except OSError as error:
+                fail(
+                    "output_write_failed",
+                    f"Could not write dry-run prompt file: {out_path}",
+                    str(error),
+                )
+            label = f"[{command}]" if multiple else ""
+            print(f"prompt_path{label}={out_path}")
         return 0
 
-    run_gemini(prompt, args, out_path, config, images, files)
+    if multiple:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+            futures = [
+                executor.submit(
+                    run_gemini,
+                    command,
+                    prompt,
+                    args,
+                    out_path,
+                    config,
+                    images,
+                    files,
+                    multiple,
+                )
+                for command, prompt, files, out_path in tasks
+            ]
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
+        return 0
+
+    command, prompt, files, out_path = tasks[0]
+    run_gemini(command, prompt, args, out_path, config, images, files, multiple)
     return 0
 
 
