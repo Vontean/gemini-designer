@@ -1,5 +1,5 @@
 .runtime/
-.gemini-designer/
+.grok-designer/
 outputs/
 __pycache__/
 *.pyc

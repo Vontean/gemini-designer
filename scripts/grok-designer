@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gemini Designer CLI."""
+"""Grok Designer CLI."""
 
 from __future__ import annotations
 
@@ -24,13 +24,13 @@ import xml.etree.ElementTree as ET
 
 
 CONFIG_DIR = pathlib.Path(
-    os.environ.get("GEMINI_DESIGNER_CONFIG_DIR", "~/.config/gemini-designer")
+    os.environ.get("GROK_DESIGNER_CONFIG_DIR", "~/.config/grok-designer")
 ).expanduser()
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 DEFAULT_API_KEY_FILE = CONFIG_DIR / "api_key"
 DEFAULT_BASE_URL = "https://zenmux.ai/api/v1"
-DEFAULT_MODEL = "google/gemini-3.1-pro-preview"
-DEFAULT_OUTPUT_DIR = pathlib.Path(".gemini-designer")
+DEFAULT_MODEL = "x-ai/grok-4.5"
+DEFAULT_OUTPUT_DIR = pathlib.Path(".grok-designer")
 DEFAULT_MAX_CHARS = 260_000
 DEFAULT_MAX_IMAGE_BYTES = 8_000_000
 DEFAULT_IMAGE_OPTIMIZE = True
@@ -116,7 +116,7 @@ Constraints:
 If key context is missing, output only:
 1. Needed context: explain why reliable UI judgment is not possible.
 2. Suggested files or information: explain why each item is needed.
-3. Rerun UI review: give an example command using `gemini-designer ui ... -f ...` or `-i ...`.
+3. Rerun UI review: give an example command using `grok-designer ui ... -f ...` or `-i ...`.
 
 Output format:
 1. Issues with the largest UI impact: order by importance, and explain evidence and impact.
@@ -156,7 +156,7 @@ Constraints:
 If key context is missing, output only:
 1. Needed context: explain why reliable UX judgment is not possible.
 2. Suggested files or information: explain why each item is needed, such as state logic, routing, form validation, component code, available component patterns, or sequential screenshots.
-3. Rerun UX review: give an example command using `gemini-designer ux ... -f ...` or `-i ...`.
+3. Rerun UX review: give an example command using `grok-designer ux ... -f ...` or `-i ...`.
 
 Output format:
 1. UX issues by task impact: order by the user's task, and explain evidence and impact.
@@ -289,8 +289,8 @@ def parse_command_list(command_text: str) -> list[str]:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = DesignerArgumentParser(
-        prog="gemini-designer",
-        description="Ask Gemini Designer through one stable CLI.",
+        prog="grok-designer",
+        description="Ask Grok Designer through one stable CLI.",
         epilog=(
             "Commands: ui = visual/UI review, optionally with -f or -i; "
             "ux = interaction and task-flow review, optionally with -f or -i; "
@@ -298,7 +298,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "html = new standalone HTML, optionally with -f; "
             "svg = new standalone SVG, optionally with -f; "
             "use comma-separated markdown review commands such as ui,ux to run them together; "
-            "Debug only: gemini-designer auth status shows whether local authorization is configured."
+            "Debug only: grok-designer auth status shows whether local authorization is configured."
         ),
     )
     parser.add_argument(
@@ -339,7 +339,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Write the assembled prompt instead of calling Gemini.",
+        help="Write the assembled prompt instead of calling Grok.",
     )
     args = parser.parse_args(argv)
     args.commands = parse_command_list(args.command)
@@ -352,7 +352,7 @@ def require_readable_output(args: argparse.Namespace) -> None:
         fail(
             "missing_output",
             f"`{', '.join(missing)}` requires -o with a readable markdown file name.",
-            f"Use: gemini-designer {args.command} \"your task\" -o readable-name.md",
+            f"Use: grok-designer {args.command} \"your task\" -o readable-name.md",
         )
 
 
@@ -402,7 +402,7 @@ def config_bool(config: dict[str, object], key: str) -> bool:
     fail(
         "invalid_config",
         f"`{key}` must be a boolean.",
-        "Fix ~/.config/gemini-designer/config.toml.",
+        "Fix ~/.config/grok-designer/config.toml.",
     )
 
 
@@ -413,7 +413,7 @@ def config_int(config: dict[str, object], key: str) -> int:
         fail(
             "invalid_config",
             f"`{key}` must be an integer.",
-            "Fix ~/.config/gemini-designer/config.toml.",
+            "Fix ~/.config/grok-designer/config.toml.",
         )
 
 
@@ -434,7 +434,7 @@ def print_auth_status() -> int:
 
 
 def handle_auth(argv: list[str]) -> int:
-    parser = DesignerArgumentParser(prog="gemini-designer auth")
+    parser = DesignerArgumentParser(prog="grok-designer auth")
     parser.add_argument("command", choices=["status"])
     args = parser.parse_args(argv)
     if args.command == "status":
@@ -534,7 +534,7 @@ def optimize_image_to_webp(
     lossless = config_bool(config, "image_webp_lossless")
     quality = config_int(config, "image_webp_quality")
     max_long_edge = config_int(config, "image_max_long_edge")
-    with tempfile.TemporaryDirectory(prefix="gemini-designer-image-") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="grok-designer-image-") as tmpdir:
         out_path = pathlib.Path(tmpdir) / "optimized.webp"
         command = [cwebp, "-quiet"]
         resize = resize_for_long_edge(path, max_long_edge)
@@ -782,7 +782,7 @@ def normalize_html_output(content: str, command: str = "html") -> str:
     if not start_match or not end_match:
         fail(
             "invalid_generated_output",
-            "Gemini did not return a complete HTML document.",
+            "Grok did not return a complete HTML document.",
             f"Retry the command. The {command} command requires raw HTML, not explanations, file URLs, or partial fragments.",
         )
     html = content[start_match.start() : end_match.end()].strip()
@@ -797,7 +797,7 @@ def normalize_svg_output(content: str) -> str:
     if start == -1 or end == -1:
         fail(
             "invalid_generated_output",
-            "Gemini did not return valid SVG source.",
+            "Grok did not return valid SVG source.",
             "Retry the command. The svg command requires raw SVG, not explanations or file URLs.",
         )
     svg = content[start : end + len("</svg>")].strip()
@@ -811,19 +811,19 @@ def validate_html_integrity(content: str, command: str) -> None:
     if not stripped.startswith("<"):
         fail(
             "invalid_generated_output",
-            "Gemini returned HTML with text before the document.",
+            "Grok returned HTML with text before the document.",
             f"Retry the command. The {command} command requires raw HTML source only.",
         )
     if not re.match(r"(?is)\A\s*(<!doctype\s+html\b|<html\b)", stripped):
         fail(
             "invalid_generated_output",
-            "Gemini returned HTML that does not start with a doctype or <html>.",
+            "Grok returned HTML that does not start with a doctype or <html>.",
             f"Retry the command. The {command} command requires one complete HTML document.",
         )
     if not re.search(r"(?is)</html\s*>\s*\Z", stripped):
         fail(
             "invalid_generated_output",
-            "Gemini returned HTML that does not end with </html>.",
+            "Grok returned HTML that does not end with </html>.",
             f"Retry the command. The {command} command requires one complete HTML document.",
         )
     lowered = stripped.lower()
@@ -831,7 +831,7 @@ def validate_html_integrity(content: str, command: str) -> None:
         if required not in lowered:
             fail(
                 "invalid_generated_output",
-                f"Gemini returned incomplete HTML. Missing `{required}`.",
+                f"Grok returned incomplete HTML. Missing `{required}`.",
                 f"Retry the command. The {command} command requires a complete document with head and body.",
             )
     for error, pattern, message, hint in HTML_FORBIDDEN_PATTERNS:
@@ -850,13 +850,13 @@ def validate_svg_integrity(content: str) -> None:
     if not stripped.startswith("<svg"):
         fail(
             "invalid_generated_output",
-            "Gemini returned SVG with text before the <svg> root.",
+            "Grok returned SVG with text before the <svg> root.",
             "Retry the command. The svg command requires raw SVG source only.",
         )
     if "```" in stripped or "file://" in stripped.lower():
         fail(
             "invalid_generated_output",
-            "Gemini returned SVG with output wrapper text or a local file URL.",
+            "Grok returned SVG with output wrapper text or a local file URL.",
             "Retry the command. The svg command requires raw SVG source only.",
         )
     validate_svg_xml(stripped)
@@ -876,13 +876,13 @@ def validate_svg_xml(content: str) -> None:
     except ET.ParseError as error:
         fail(
             "invalid_generated_output",
-            f"Gemini returned SVG that is not valid XML: {error}",
+            f"Grok returned SVG that is not valid XML: {error}",
             "Retry the command. The svg command requires XML-valid SVG source.",
         )
     if not root.tag.endswith("svg"):
         fail(
             "invalid_generated_output",
-            "Gemini returned XML, but the root element is not SVG.",
+            "Grok returned XML, but the root element is not SVG.",
             "Retry the command. The svg command requires an <svg> root element.",
         )
 
@@ -918,7 +918,7 @@ def user_message_content(prompt: str, images: list[dict[str, object]]) -> object
     return [{"type": "text", "text": prompt}, *image_content_parts(images)]
 
 
-def request_gemini(
+def request_grok(
     prompt: str,
     command: str,
     config: dict[str, object],
@@ -950,7 +950,7 @@ def request_gemini(
         detail = error.read().decode("utf-8", errors="replace")
         fail(
             "api_http_error",
-            f"Gemini provider returned HTTP {error.code}.",
+            f"Grok provider returned HTTP {error.code}.",
             detail[:1000],
         )
     except urllib.error.URLError as error:
@@ -978,7 +978,7 @@ def request_gemini(
     return normalize_model_output(content, command)
 
 
-def run_gemini(
+def run_grok(
     command: str,
     prompt: str,
     args: argparse.Namespace,
@@ -992,8 +992,8 @@ def run_gemini(
     if not api_key:
         fail(
             "not_authorized",
-            "Gemini Designer is not authorized.",
-            "Run `gemini-designer auth status`. Ask the user to configure authorization outside the agent.",
+            "Grok Designer is not authorized.",
+            "Run `grok-designer auth status`. Ask the user to configure authorization outside the agent.",
         )
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1003,7 +1003,7 @@ def run_gemini(
             f"Could not create output directory: {out_path.parent}",
             str(error),
         )
-    content = request_gemini(prompt, command, config, api_key, images)
+    content = request_grok(prompt, command, config, api_key, images)
     content += original_prompt_appendix(command, args, files, images)
     try:
         out_path.write_text(content)
@@ -1033,7 +1033,7 @@ def main(argv: list[str]) -> int:
         fail(
             "invalid_config",
             "`max_chars` must be an integer.",
-            "Fix ~/.config/gemini-designer/config.toml or pass --max-chars.",
+            "Fix ~/.config/grok-designer/config.toml or pass --max-chars.",
         )
     images = [read_image(path, config) for path in args.image]
     output_dir = resolve_path(config["output_dir"])
@@ -1062,7 +1062,7 @@ def main(argv: list[str]) -> int:
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
             futures = [
                 executor.submit(
-                    run_gemini,
+                    run_grok,
                     command,
                     prompt,
                     args,
@@ -1079,7 +1079,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     command, prompt, files, out_path = tasks[0]
-    run_gemini(command, prompt, args, out_path, config, images, files, multiple)
+    run_grok(command, prompt, args, out_path, config, images, files, multiple)
     return 0
 
 
