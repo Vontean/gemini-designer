@@ -20,7 +20,13 @@ npx skills add Vontean/gemini-designer
 
 After installation, agents should use the `gemini-designer` skill when a task needs external design judgment.
 
-In the Codex desktop app, the Skill asks Codex to run `gemini-designer` in a PTY-backed Terminal opened in the Side Panel. The visible command then starts the official `agy` CLI, so the user can observe that the Antigravity task is running without moving the conversation into the Antigravity desktop client.
+In the Codex desktop app, the primary workflow is a visible interactive Antigravity TUI. Codex opens a Side Panel Terminal, starts `agy` there, and then sends design tasks and follow-up messages through that same live Terminal session. The `gemini-designer` headless wrapper is retained only as a compatibility fallback for environments without an interactive Codex Terminal.
+
+```bash
+agy --model gemini-3.7-flash-high --mode accept-edits --sandbox --add-dir "$PWD"
+```
+
+Related design iterations stay in the same running Agy session. Unrelated or deliberately independent design tasks start a new session; a closed session can be resumed with its exact conversation ID.
 
 ## Requirement and authorization
 
@@ -49,8 +55,8 @@ Authentication remains owned by Antigravity. Gemini Designer does not read, copy
 
 ## What Agents Should Know
 
-- Each Gemini Designer call starts a new Antigravity headless run. It receives the current prompt, embedded text files passed with `-f`, and local image paths passed with `-i`.
-- Each run prints an Antigravity `conversation_id`. Pass it back with `--conversation` when refining the same design task; omit it for unrelated work or intentionally independent alternatives.
+- In Codex desktop, start interactive `agy` in the Side Panel Terminal and keep that process alive for related iterations.
+- In the compatibility fallback, each Gemini Designer call starts a headless run and prints a `conversation_id`; pass it back with `--conversation` when refining the same design task.
 - For visual/UI review, use `gemini-designer ui`.
 - For UX, component-choice, task-flow, interaction, friction, or state-feedback review, use `gemini-designer ux`.
 - For combined UI + UX review, use `gemini-designer ui,ux` or run `ui` and `ux` separately.
@@ -95,6 +101,6 @@ scripts/install_cli
 
 `SKILL.md` tells agents when and how to use Gemini. `scripts/install_cli` installs the CLI into the user's local bin directory. `scripts/gemini-designer` is the command agents call.
 
-The wrapper invokes `agy` non-interactively in `accept-edits` mode with terminal sandboxing enabled, explicitly adds the caller's current directory as the active workspace, pins `gemini-3.7-flash-high` by default, waits up to 30 minutes, captures JSON output and its conversation ID, and keeps generated artifacts under the caller's workspace. This grants automatic reads and edits inside the active workspace without enabling `--dangerously-skip-permissions`; terminal commands remain governed by Antigravity's permission rules and sandbox.
+The wrapper invokes `agy` non-interactively in `accept-edits` mode with terminal sandboxing enabled, explicitly adds the caller's current directory as the active workspace, pins `gemini-3.7-flash-high` by default, waits up to 30 minutes, renders its event stream as readable live Terminal progress, captures the final output and conversation ID, and keeps generated artifacts under the caller's workspace. This grants automatic reads and edits inside the active workspace without enabling `--dangerously-skip-permissions`; terminal commands remain governed by Antigravity's permission rules and sandbox.
 
 Antigravity CLI and Antigravity 2.0 share the agent harness and settings, but headless CLI conversations do not currently appear automatically in the desktop conversation list. The official CLI can resume one with `agy --conversation <id>`; it does not currently expose a supported headless flag for exporting or opening that CLI conversation in the desktop client.

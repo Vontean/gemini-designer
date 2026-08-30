@@ -9,23 +9,20 @@ Use Gemini 3.7 Flash through Google Antigravity as an external advisor for visua
 
 ## Critical rules
 
-- ONLY interact with Gemini through the global `gemini-designer` CLI. The wrapper must call the official local Antigravity CLI (`agy`); do not call ZenMux, OpenCodex, or a provider API directly.
-- When this skill is used, call `gemini-designer` before giving UI advice, UX advice, design imagery, art direction, critique, visual advice, HTML, or SVG output. Do not write those deliverables from the agent's own judgment.
-- Call `gemini-designer` directly in the normal path. If the command is missing, install it silently with the bundled `scripts/install_cli` script, then retry. If `agy` is missing, report that the official Google Antigravity CLI must be installed and signed in.
-- When running inside the Codex desktop app, launch `gemini-designer` in a PTY-backed Codex Terminal and open that Terminal in the Side Panel while the command is running. Keep the Antigravity invocation visible to the user instead of running it as a hidden background command. `gemini-designer` remains the command entered in the Terminal; its wrapper starts the official `agy` CLI.
-- For visual/UI review of existing files, use `gemini-designer ui`.
-- For UX, task-model, component-choice, interaction-flow, friction, or state-behavior review, use `gemini-designer ux`.
-- For requests that need both UI and UX review, run `ui` and `ux` independently. You may use the CLI's comma-separated form, such as `gemini-designer ui,ux ...`, or run separate commands in parallel.
-- For broad art direction, use `gemini-designer direction`. It may include files as background context.
-- For design imagery markdown, use `gemini-designer direction` and read the generated markdown before responding.
-- For new standalone HTML/SVG design drafts, use `gemini-designer html` or `gemini-designer svg`.
-- For a single handwritten SVG brand wordmark, lettering mark, signature mark, or logo-like text asset, use `gemini-designer svg`.
-- For a comparison sheet with multiple wordmark candidates, use `gemini-designer html`.
+- In the Codex desktop app, interact with Gemini through a visible, interactive Antigravity CLI (`agy`) running inside a Side Panel Terminal. Do not use the headless `gemini-designer` wrapper as the normal Codex path.
+- Open the Side Panel Terminal first. In that exact Terminal, start `agy` with the current workspace, `gemini-3.7-flash-high`, `accept-edits`, and sandbox enabled. Only after the Antigravity TUI is visible and ready should Codex send the design task through the same Terminal session.
+- Keep the interactive `agy` process alive while the design task is active. Send refinements, corrections, implementation follow-ups, and related design questions into that same Terminal session so Gemini retains the thread context.
+- Start a new interactive `agy` session for an unrelated design goal, a deliberately independent alternative, or a clean-slate review. If a relevant session was closed, resume its exact conversation ID instead of using the workspace's ambiguous most-recent conversation.
+- When this skill is used, ask the interactive Agy session before giving UI advice, UX advice, design imagery, art direction, critique, visual advice, HTML, or SVG output. Do not replace Gemini's design judgment with the Codex agent's own judgment.
+- Do not call ZenMux, OpenCodex, or a provider API directly. Outside the Codex desktop app, or only when an interactive Side Panel Terminal is unavailable, use the global `gemini-designer` wrapper as the compatibility fallback.
+- For visual/UI review, tell the interactive Agy session to focus on visual hierarchy, typography, color, spacing, surfaces, component appearance, consistency, and finish.
+- For UX review, tell the session to focus on task model, component choice, flow, friction, affordance, recoverability, validation, navigation, and visible states.
+- For requests that need both UI and UX review, ask for both dimensions in the same live session when they inform one design decision. Use independent sessions only when the user wants independent judgment.
+- For broad art direction or design imagery, ask the session to act as a visual design director and ground its judgment in the provided product context and references.
+- For HTML, SVG, icons, illustrations, or wordmarks, tell the session the exact artifact type and workspace output path, then let Agy create the file directly.
 - If the user provides screenshots, mockups, moodboards, or visual references, include relevant images with `-i / --image` when they help Gemini judge visual style, layout, hierarchy, mood, fidelity, interaction sequence, or state transitions.
-- A new Gemini conversation is stateless. It does not know the current project, prior conversation, screenshots, local files, design rules, or previous Gemini outputs unless they are included in the current command.
-- Decide whether each call is a new design thread or an iteration of an existing thread. For refinement, correction, extension, or implementation follow-up on the same design task, pass the exact prior `conversation_id` with `--conversation`. For an unrelated design goal, a deliberately independent alternative, or a clean-slate review, omit `--conversation` to start a new thread. Never use `--continue`, because another Antigravity task in the same workspace may have become the most recent conversation.
-- After every successful call, retain the printed `conversation_id` with the task context. For multi-command review, retain the command-specific IDs such as `conversation_id[ui]` and `conversation_id[ux]` and resume the matching design dimension.
-- Do not combine `--conversation` with a comma-separated multi-command call. Resume UI and UX iterations separately with their matching IDs so two parallel runs never write into the same Antigravity thread.
+- A new Gemini conversation is stateless. Give the interactive Agy session the concrete task, relevant workspace paths, screenshots, design rules, and constraints it needs. Once the session has that context, do not resend the entire history on every follow-up.
+- Do not run two Codex agents against the same live Agy Terminal. UI and UX may share one interactive thread when they are part of the same design decision; use separate Agy sessions only when independent judgment is intentional.
 - Do not ask Gemini to review code quality, technical debt, CSS lint, engineering consistency, performance, or architecture unless the user explicitly asks. Keep Gemini focused on what users can perceive and operate.
 - Do not ask Gemini to output code patches or diffs for existing files. Use its design advice, then make the actual edits yourself.
 - After Gemini returns UI advice, UX advice, design imagery markdown, visual direction, or an HTML mockup, show the output or a concise summary to the user and wait for confirmation before implementing it in project code, unless the user explicitly asked to implement immediately.
@@ -35,19 +32,44 @@ Use Gemini 3.7 Flash through Google Antigravity as an external advisor for visua
 - Pass the user's stated requirements and concrete project context. Do not add the agent's own style labels, layout choices, color choices, metaphor choices, interaction concepts, or evaluation criteria unless the user explicitly said them.
 - Do not pre-design for Gemini. For creative generation, state the user goal, source material, output format, and hard constraints only. Do not name visual directions, metaphors, layouts, palettes, typography, materials, animations, or interaction models unless the user explicitly provided them.
 - For multiple alternatives, ask Gemini for independent, clearly different options. Do not assign the options names like "dashboard direction", "editorial direction", or "radar direction" unless the user gave those directions.
-- Google Antigravity owns authentication and the shared local agent session. Do not pre-check authorization in the normal path. If a call fails with an Antigravity authorization error, report that Antigravity CLI is not authorized.
+- Google Antigravity owns authentication. Do not pre-check authorization before launching the interactive session. If Agy reports an authorization error, tell the user that Antigravity CLI is not authorized.
 
-## Gemini CLI
+## Codex Side Panel workflow
 
-Use `gemini-designer` for every Gemini task.
+The Codex desktop path is an interactive terminal workflow, not a headless subprocess workflow.
 
-Normal path: call `gemini-designer` directly. Do not run install or auth checks before every use.
+1. Create a PTY-backed Terminal in the current Codex task and open it in the Side Panel.
+2. In that Terminal, run:
+
+```bash
+agy \
+  --model gemini-3.7-flash-high \
+  --mode accept-edits \
+  --sandbox \
+  --add-dir "$PWD"
+```
+
+3. Wait until the Antigravity TUI shows the signed-in account, model, workspace, and prompt input.
+4. Send the design task through that same Terminal session. Keep the task close to the user's wording and include relevant paths or images.
+5. Observe Agy's reasoning status, tool calls, permission requests, edits, and response directly in the Side Panel Terminal.
+6. For a follow-up on the same design, send another message to the same running Agy session. Do not relaunch Agy and do not reconstruct the earlier context.
+7. For HTML, SVG, or another file artifact, tell Agy the exact workspace output path and let it create the file under `accept-edits`; then read that file from Codex.
+8. For advisory UI, UX, or direction work, read the completed Agy response from the Terminal and synthesize it for the user.
+9. Leave the Agy process running while more iterations are expected. When closing it, retain the exact resume command or conversation ID shown by Agy.
+
+If the Side Panel cannot attach the Terminal, do not silently fall back while claiming the run is visible. Tell the user that the Codex Terminal is not attached, then use the compatibility fallback only if continuing without the visible TUI is acceptable.
+
+## Compatibility fallback CLI
+
+Use `gemini-designer` only outside the Codex desktop app or when an interactive Side Panel Terminal is unavailable and a headless fallback is acceptable.
+
+Do not run install or auth checks before every fallback use.
 
 If the shell reports `command not found`, resolve `/path/to/this-skill` to the directory containing this `SKILL.md`, run `bash /path/to/this-skill/scripts/install_cli` silently, then retry the original `gemini-designer` command. Use `bash` explicitly because archive-based Skill installers may not preserve executable bits. If the installer reports a `path_warning`, use the printed `installed_path` for this turn and tell the user that the CLI directory is not on PATH.
 
 If the CLI reports an Antigravity authorization failure, stop and tell the user to sign in through Antigravity CLI. Do not read, copy, print, or manage API keys or OAuth tokens.
 
-Each command has its own built-in prompt. Choose the right command and pass the user's task plainly; do not add a cross-command prompt framework, design direction, UX solution, or extra output rules unless the user explicitly gave them.
+Each fallback command has its own built-in prompt. Choose the right command and pass the user's task plainly; do not add a cross-command prompt framework, design direction, UX solution, or extra output rules unless the user explicitly gave them.
 
 Commands:
 
@@ -85,7 +107,7 @@ The built-in `direction`, `html`, and `svg` prompts lightly remind Gemini to avo
 
 ## Context Rules
 
-Gemini receives only the command text, files passed with `-f`, and images passed with `-i`. It has no memory across calls.
+An interactive Agy session retains its conversation context. A new session receives only what Codex sends or what Agy reads from the active workspace. The headless fallback receives only the command text, files passed with `-f`, and images passed with `-i`.
 
 The CLI places the final user goal after reference files and image manifests so Gemini sees the concrete task last. Agents should keep the task text close to the user's wording instead of repeating constraints in several places.
 
@@ -269,7 +291,7 @@ For generated HTML/SVG, treat `output_path` plus `integrity=passed` as the norma
 
 - The global CLI reads `~/.config/gemini-designer/config.toml`.
 - The default model is `gemini-3.7-flash-high`; change the flat `model` value only when the user explicitly wants another Antigravity model slug.
-- The wrapper calls `agy` in non-interactive plan mode and parses its JSON result.
+- The wrapper calls `agy` in non-interactive `accept-edits` mode, renders its `stream-json` events as readable live Terminal progress, and parses the terminal result.
 - Authentication remains owned by Google Antigravity. Agents should not read, copy, or manage API keys or OAuth tokens.
 - Do not check authorization in the normal path. Use `gemini-designer auth status` only when explicitly debugging authorization.
 
@@ -287,21 +309,16 @@ For generated HTML/SVG, treat `output_path` plus `integrity=passed` as the norma
 
 ## Workflow
 
-1. Choose the smallest useful Gemini task: `ui`, `ux`, `direction`, `html`, or `svg`.
-2. Run `gemini-designer` with a readable `-o` path and get an `output_path` before writing the final answer or file.
-3. Use the user's wording as the task text whenever possible. Add only factual context needed to identify files, product scope, or constraints the user actually gave.
-4. For visual/UI review, call `gemini-designer ui`.
-5. For UX, task-model, component-choice, interaction-flow, friction, or state-feedback review, call `gemini-designer ux`.
-6. For combined UI + UX review, run `gemini-designer ui,ux` or run both commands independently and synthesize the outputs.
-7. For design imagery markdown or visual direction, call `gemini-designer direction`.
-8. For new HTML/SVG design drafts, call `gemini-designer html` or `gemini-designer svg`; include `-f` or `-i` when reference context matters.
-9. For a single handwritten SVG wordmark, call `gemini-designer svg`; for several wordmark candidates in one comparison sheet, call `gemini-designer html`.
-10. Read Gemini's output.
-11. If `ui` or `ux` says more context is needed, gather the requested context and rerun the same command once before presenting advice to the user. If the context is unavailable, ask the user for it.
-12. When implementing `ui` or `ux` output, first look for existing project components, selectors, classes, tokens, variables, and layout patterns to reuse. If Gemini suggests replacing a broad system or inventing unrelated UI, narrow it to existing patterns before editing.
-13. If Gemini drifts into code review when the task is design review, rerun with a scoped goal such as: "只从 UI/UX 角度判断，不要评论代码规范或工程债。"
-14. Present advisory outputs or HTML mockups to the user for confirmation before editing project code, unless the user explicitly asked to implement immediately.
-15. Base the final response on Gemini's output. You may summarize, select, or implement useful parts, but do not replace Gemini's design judgment with your own generated design direction.
+1. Open the Side Panel Terminal and start interactive `agy`.
+2. Choose the smallest useful Gemini task: UI, UX, direction, HTML, or SVG.
+3. Send the user's task to the running Agy session using the user's wording whenever possible. Add only factual context needed to identify files, product scope, or explicit constraints.
+4. Keep related iterations in the same Agy session; start a new session only for unrelated or intentionally independent work.
+5. Read Gemini's Terminal response or the file artifact it created.
+6. If Gemini says more context is needed, send the missing paths, state details, or screenshots into the same session and continue.
+7. When implementing Gemini's advice, first look for existing project components, selectors, classes, tokens, variables, and layout patterns to reuse.
+8. If Gemini drifts into code review, correct it in the same session: "只从 UI/UX 角度判断，不要评论代码规范或工程债。"
+9. Present advisory outputs or HTML mockups to the user for confirmation before editing project code, unless the user explicitly asked to implement immediately.
+10. Base the final response on Gemini's output. You may summarize, select, or implement useful parts, but do not replace Gemini's design judgment with your own generated design direction.
 
 ## Tips
 
