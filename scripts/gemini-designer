@@ -814,7 +814,7 @@ def request_gemini(
         "--model",
         str(config["model"]),
         "--output-format",
-        "json",
+        "stream-json",
         "--mode",
         str(config["mode"]),
         "--disable-slash-commands",
@@ -829,13 +829,19 @@ def request_gemini(
     workspace_dirs.update(str(pathlib.Path(image["path"]).parent) for image in images)
     for workspace_dir in sorted(workspace_dirs):
         agy_command.extend(["--add-dir", workspace_dir])
+    print(
+        f"[agy] starting model={config['model']} mode={config['mode']} "
+        f"timeout={config['print_timeout']}",
+        file=sys.stderr,
+        flush=True,
+    )
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             agy_command,
-            check=False,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=None,
             text=True,
+            bufsize=1,
         )
     except OSError as error:
         fail(
@@ -843,34 +849,80 @@ def request_gemini(
             f"Could not launch Antigravity CLI: {error}",
             "Check that `agy` is installed and executable.",
         )
-    try:
-        data = json.loads(result.stdout)
-    except json.JSONDecodeError:
+    terminal_result: dict[str, object] | None = None
+    conversation_id = ""
+    wrote_response = False
+    invalid_lines: list[str] = []
+    assert process.stdout is not None
+    for raw_line in process.stdout:
+        try:
+            event = json.loads(raw_line)
+        except json.JSONDecodeError:
+            invalid_lines.append(raw_line.strip())
+            continue
+        event_type = event.get("event")
+        if event_type == "init":
+            conversation_id = str(event.get("conversation_id", "")).strip()
+            print(
+                f"[agy] started conversation={conversation_id or 'unknown'}",
+                file=sys.stderr,
+                flush=True,
+            )
+            continue
+        if event_type == "step_update":
+            update = event.get("step_update") or {}
+            tool_info = update.get("tool_info") or {}
+            if tool_info:
+                tool_name = str(tool_info.get("name", "tool"))
+                if tool_info.get("error"):
+                    print(f"[agy] tool failed: {tool_name}", file=sys.stderr, flush=True)
+                elif "output" in tool_info:
+                    print(f"[agy] tool completed: {tool_name}", file=sys.stderr, flush=True)
+                else:
+                    print(f"[agy] tool: {tool_name}", file=sys.stderr, flush=True)
+            text_delta = update.get("text_delta")
+            if text_delta:
+                if not wrote_response:
+                    print("[agy] response:", file=sys.stderr, flush=True)
+                    wrote_response = True
+                print(str(text_delta), end="", file=sys.stderr, flush=True)
+            continue
+        if event_type == "result":
+            result_payload = event.get("result") or {}
+            if isinstance(result_payload, dict):
+                terminal_result = result_payload
+                conversation_id = str(
+                    result_payload.get("conversation_id") or conversation_id
+                ).strip()
+    return_code = process.wait()
+    if wrote_response:
+        print(file=sys.stderr, flush=True)
+    if terminal_result is None:
         fail(
             "invalid_antigravity_response",
-            "Antigravity CLI did not return valid JSON.",
-            (result.stderr or result.stdout)[:1000],
+            "Antigravity CLI did not return a terminal result event.",
+            "\n".join(invalid_lines)[:1000] or "Retry the command and inspect the visible Agy terminal output.",
         )
-    if result.returncode != 0 or data.get("status") != "SUCCESS":
+    if return_code != 0 or terminal_result.get("status") != "SUCCESS":
         fail(
             "antigravity_run_failed",
-            f"Antigravity run ended with status {data.get('status', 'ERROR')}.",
-            str(data.get("error") or result.stderr or "Run `gemini-designer auth status` to verify the shared Antigravity login.")[:1000],
+            f"Antigravity run ended with status {terminal_result.get('status', 'ERROR')}.",
+            str(terminal_result.get("error") or "Inspect the visible Agy terminal output, or run `gemini-designer auth status` to verify authorization.")[:1000],
         )
-    content = str(data.get("response", ""))
+    content = str(terminal_result.get("response", ""))
     if not content:
         fail(
             "empty_antigravity_response",
             "Antigravity returned an empty response.",
-            result.stdout[:1000],
+            "Inspect the visible Agy terminal output for denied tools or missing context.",
         )
-    conversation_id = str(data.get("conversation_id", "")).strip()
     if not conversation_id:
         fail(
             "missing_conversation_id",
             "Antigravity returned no conversation ID.",
             "Retry the command. A conversation ID is required for reliable design iteration.",
         )
+    print("[agy] completed", file=sys.stderr, flush=True)
     return normalize_model_output(content, command), conversation_id
 
 

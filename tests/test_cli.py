@@ -28,9 +28,31 @@ import sys
 
 Path(os.environ[\"AGY_ARGS_PATH\"]).write_text(json.dumps(sys.argv[1:]))
 print(json.dumps({
-    \"status\": \"SUCCESS\",
-    \"response\": \"# Design review\\n\",
+    \"event\": \"init\",
     \"conversation_id\": \"new-conversation-id\",
+    \"init\": {\"model\": \"fake-model\"},
+}))
+print(json.dumps({
+    \"event\": \"step_update\",
+    \"step_update\": {
+        \"step_type\": \"tool\",
+        \"tool_info\": {\"name\": \"view_file\", \"parameters\": {}},
+    },
+}))
+print(json.dumps({
+    \"event\": \"step_update\",
+    \"step_update\": {
+        \"step_type\": \"agent_response\",
+        \"text_delta\": \"# Design review\\n\",
+    },
+}))
+print(json.dumps({
+    \"event\": \"result\",
+    \"result\": {
+        \"status\": \"SUCCESS\",
+        \"response\": \"# Design review\\n\",
+        \"conversation_id\": \"new-conversation-id\",
+    },
 }))
 """
             )
@@ -55,11 +77,16 @@ print(json.dumps({
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("conversation_id=new-conversation-id", result.stdout)
+        self.assertIn("[agy] started conversation=new-conversation-id", result.stderr)
+        self.assertIn("[agy] tool: view_file", result.stderr)
+        self.assertIn("# Design review", result.stderr)
+        self.assertIn("[agy] completed", result.stderr)
         self.assertEqual(agy_args[agy_args.index("--print-timeout") + 1], "30m")
         self.assertEqual(agy_args[agy_args.index("--mode") + 1], "accept-edits")
         self.assertIn("--sandbox", agy_args)
         self.assertNotIn("--dangerously-skip-permissions", agy_args)
         self.assertIn("--add-dir", agy_args)
+        self.assertEqual(agy_args[agy_args.index("--output-format") + 1], "stream-json")
 
     def test_exact_conversation_is_resumed(self) -> None:
         result, agy_args = self.run_cli("--conversation", "prior-conversation-id")
