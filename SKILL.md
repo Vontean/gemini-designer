@@ -39,7 +39,7 @@ Use `gemini-designer` for every Gemini task.
 
 Normal path: call `gemini-designer` directly. Do not run install or auth checks before every use.
 
-If the shell reports `command not found`, resolve `/path/to/this-skill` to the directory containing this `SKILL.md`, run `/path/to/this-skill/scripts/install_cli` silently, then retry the original `gemini-designer` command. If the installer reports a `path_warning`, use the printed `installed_path` for this turn and tell the user that the CLI directory is not on PATH.
+If the shell reports `command not found`, resolve `/path/to/this-skill` to the directory containing this `SKILL.md`, run `bash /path/to/this-skill/scripts/install_cli` silently, then retry the original `gemini-designer` command. Use `bash` explicitly because archive-based Skill installers may not preserve executable bits. If the installer reports a `path_warning`, use the printed `installed_path` for this turn and tell the user that the CLI directory is not on PATH.
 
 If the CLI reports an Antigravity authorization failure, stop and tell the user to sign in through Antigravity CLI. Do not read, copy, print, or manage API keys or OAuth tokens.
 
