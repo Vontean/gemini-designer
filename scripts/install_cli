@@ -16,7 +16,9 @@ if [[ ! -f "$config_path" ]]; then
   umask 077
   {
     printf '%s\n' 'model = "gemini-3.7-flash-high"'
-    printf '%s\n' 'print_timeout = "5m"'
+    printf '%s\n' 'print_timeout = "30m"'
+    printf '%s\n' 'mode = "accept-edits"'
+    printf '%s\n' 'sandbox = true'
     printf '%s\n' 'output_dir = ".gemini-designer"'
     printf '%s\n' 'max_chars = 260000'
   } > "$config_path"

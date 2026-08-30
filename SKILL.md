@@ -12,6 +12,7 @@ Use Gemini 3.7 Flash through Google Antigravity as an external advisor for visua
 - ONLY interact with Gemini through the global `gemini-designer` CLI. The wrapper must call the official local Antigravity CLI (`agy`); do not call ZenMux, OpenCodex, or a provider API directly.
 - When this skill is used, call `gemini-designer` before giving UI advice, UX advice, design imagery, art direction, critique, visual advice, HTML, or SVG output. Do not write those deliverables from the agent's own judgment.
 - Call `gemini-designer` directly in the normal path. If the command is missing, install it silently with the bundled `scripts/install_cli` script, then retry. If `agy` is missing, report that the official Google Antigravity CLI must be installed and signed in.
+- When running inside the Codex desktop app, launch `gemini-designer` in a PTY-backed Codex Terminal and open that Terminal in the Side Panel while the command is running. Keep the Antigravity invocation visible to the user instead of running it as a hidden background command. `gemini-designer` remains the command entered in the Terminal; its wrapper starts the official `agy` CLI.
 - For visual/UI review of existing files, use `gemini-designer ui`.
 - For UX, task-model, component-choice, interaction-flow, friction, or state-behavior review, use `gemini-designer ux`.
 - For requests that need both UI and UX review, run `ui` and `ux` independently. You may use the CLI's comma-separated form, such as `gemini-designer ui,ux ...`, or run separate commands in parallel.
@@ -21,7 +22,10 @@ Use Gemini 3.7 Flash through Google Antigravity as an external advisor for visua
 - For a single handwritten SVG brand wordmark, lettering mark, signature mark, or logo-like text asset, use `gemini-designer svg`.
 - For a comparison sheet with multiple wordmark candidates, use `gemini-designer html`.
 - If the user provides screenshots, mockups, moodboards, or visual references, include relevant images with `-i / --image` when they help Gemini judge visual style, layout, hierarchy, mood, fidelity, interaction sequence, or state transitions.
-- Gemini is stateless. It does not know the current project, prior conversation, screenshots, local files, design rules, or previous Gemini outputs unless they are included in the current command.
+- A new Gemini conversation is stateless. It does not know the current project, prior conversation, screenshots, local files, design rules, or previous Gemini outputs unless they are included in the current command.
+- Decide whether each call is a new design thread or an iteration of an existing thread. For refinement, correction, extension, or implementation follow-up on the same design task, pass the exact prior `conversation_id` with `--conversation`. For an unrelated design goal, a deliberately independent alternative, or a clean-slate review, omit `--conversation` to start a new thread. Never use `--continue`, because another Antigravity task in the same workspace may have become the most recent conversation.
+- After every successful call, retain the printed `conversation_id` with the task context. For multi-command review, retain the command-specific IDs such as `conversation_id[ui]` and `conversation_id[ux]` and resume the matching design dimension.
+- Do not combine `--conversation` with a comma-separated multi-command call. Resume UI and UX iterations separately with their matching IDs so two parallel runs never write into the same Antigravity thread.
 - Do not ask Gemini to review code quality, technical debt, CSS lint, engineering consistency, performance, or architecture unless the user explicitly asks. Keep Gemini focused on what users can perceive and operate.
 - Do not ask Gemini to output code patches or diffs for existing files. Use its design advice, then make the actual edits yourself.
 - After Gemini returns UI advice, UX advice, design imagery markdown, visual direction, or an HTML mockup, show the output or a concise summary to the user and wait for confirmation before implementing it in project code, unless the user explicitly asked to implement immediately.
@@ -210,6 +214,7 @@ The script prints on success:
 
 ```text
 output_path=<path to output file>
+conversation_id=<Antigravity conversation ID>
 ```
 
 For multi-command review, it prints one path per command:
@@ -217,7 +222,20 @@ For multi-command review, it prints one path per command:
 ```text
 output_path[ui]=<path to UI output file>
 output_path[ux]=<path to UX output file>
+conversation_id[ui]=<UI Antigravity conversation ID>
+conversation_id[ux]=<UX Antigravity conversation ID>
 ```
+
+Continue the same design thread with the exact ID:
+
+```bash
+gemini-designer ui "根据上一轮反馈继续收敛层级方案" \
+  --conversation <conversation-id> \
+  -f ./design.html \
+  -o design-page-ui-v2.md
+```
+
+Headless CLI conversations do not automatically appear in the Antigravity 2.0 desktop conversation list. The official CLI currently exposes the conversation ID for resuming with `agy --conversation <id>`, but does not expose a headless CLI flag that exports or opens that conversation in the desktop client. Do not copy or rewrite Antigravity conversation databases to work around this boundary.
 
 For `html` and `svg`, the script also prints:
 

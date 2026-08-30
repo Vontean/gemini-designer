@@ -28,7 +28,9 @@ CONFIG_DIR = pathlib.Path(
 ).expanduser()
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 DEFAULT_MODEL = "gemini-3.7-flash-high"
-DEFAULT_PRINT_TIMEOUT = "5m"
+DEFAULT_PRINT_TIMEOUT = "30m"
+DEFAULT_MODE = "accept-edits"
+DEFAULT_SANDBOX = True
 DEFAULT_OUTPUT_DIR = pathlib.Path(".gemini-designer")
 DEFAULT_MAX_CHARS = 260_000
 READABLE_OUTPUT_REQUIRED_COMMANDS = {"ui", "ux", "direction"}
@@ -330,12 +332,23 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help=f"Maximum total file characters. Default: config or {DEFAULT_MAX_CHARS}.",
     )
     parser.add_argument(
+        "--conversation",
+        help="Continue an exact Antigravity conversation ID for an iteration of the same design task.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Write the assembled prompt instead of calling Gemini.",
     )
     args = parser.parse_args(argv)
     args.commands = parse_command_list(args.command)
+    if args.conversation and len(args.commands) > 1:
+        fail(
+            "invalid_args",
+            "A single conversation ID cannot be resumed by multiple parallel commands.",
+            "Run each command separately with its matching conversation ID.",
+            code=2,
+        )
     return args
 
 
@@ -353,6 +366,8 @@ def load_config() -> dict[str, object]:
     config: dict[str, object] = {
         "model": DEFAULT_MODEL,
         "print_timeout": DEFAULT_PRINT_TIMEOUT,
+        "mode": DEFAULT_MODE,
+        "sandbox": DEFAULT_SANDBOX,
         "output_dir": str(DEFAULT_OUTPUT_DIR),
         "max_chars": DEFAULT_MAX_CHARS,
     }
@@ -780,9 +795,10 @@ def normalize_model_output(content: str, command: str) -> str:
 def request_gemini(
     prompt: str,
     command: str,
+    conversation: str | None,
     config: dict[str, object],
     images: list[dict[str, object]],
-) -> str:
+) -> tuple[str, str]:
     agy = shutil.which("agy")
     if not agy:
         fail(
@@ -800,13 +816,19 @@ def request_gemini(
         "--output-format",
         "json",
         "--mode",
-        "plan",
+        str(config["mode"]),
         "--disable-slash-commands",
         "--print-timeout",
         str(config["print_timeout"]),
     ]
-    for image_dir in sorted({str(pathlib.Path(image["path"]).parent) for image in images}):
-        agy_command.extend(["--add-dir", image_dir])
+    if bool(config["sandbox"]):
+        agy_command.append("--sandbox")
+    if conversation:
+        agy_command.extend(["--conversation", conversation])
+    workspace_dirs = {str(pathlib.Path.cwd())}
+    workspace_dirs.update(str(pathlib.Path(image["path"]).parent) for image in images)
+    for workspace_dir in sorted(workspace_dirs):
+        agy_command.extend(["--add-dir", workspace_dir])
     try:
         result = subprocess.run(
             agy_command,
@@ -842,7 +864,14 @@ def request_gemini(
             "Antigravity returned an empty response.",
             result.stdout[:1000],
         )
-    return normalize_model_output(content, command)
+    conversation_id = str(data.get("conversation_id", "")).strip()
+    if not conversation_id:
+        fail(
+            "missing_conversation_id",
+            "Antigravity returned no conversation ID.",
+            "Retry the command. A conversation ID is required for reliable design iteration.",
+        )
+    return normalize_model_output(content, command), conversation_id
 
 
 def run_gemini(
@@ -863,7 +892,13 @@ def run_gemini(
             f"Could not create output directory: {out_path.parent}",
             str(error),
         )
-    content = request_gemini(prompt, command, config, images)
+    content, conversation_id = request_gemini(
+        prompt,
+        command,
+        args.conversation,
+        config,
+        images,
+    )
     content += original_prompt_appendix(command, args, files, images)
     try:
         out_path.write_text(content)
@@ -875,6 +910,7 @@ def run_gemini(
         )
     label = f"[{command}]" if multiple else ""
     print(f"output_path{label}={out_path}")
+    print(f"conversation_id{label}={conversation_id}")
     if command in OUTPUT_TYPES:
         print("integrity=passed")
 

@@ -20,6 +20,8 @@ npx skills add Vontean/gemini-designer
 
 After installation, agents should use the `gemini-designer` skill when a task needs external design judgment.
 
+In the Codex desktop app, the Skill asks Codex to run `gemini-designer` in a PTY-backed Terminal opened in the Side Panel. The visible command then starts the official `agy` CLI, so the user can observe that the Antigravity task is running without moving the conversation into the Antigravity desktop client.
+
 ## Requirement and authorization
 
 Install and sign in to the official [Google Antigravity CLI](https://antigravity.google/docs/cli/install/). Gemini Designer reuses its local Antigravity session and shared agent harness.
@@ -48,6 +50,7 @@ Authentication remains owned by Antigravity. Gemini Designer does not read, copy
 ## What Agents Should Know
 
 - Each Gemini Designer call starts a new Antigravity headless run. It receives the current prompt, embedded text files passed with `-f`, and local image paths passed with `-i`.
+- Each run prints an Antigravity `conversation_id`. Pass it back with `--conversation` when refining the same design task; omit it for unrelated work or intentionally independent alternatives.
 - For visual/UI review, use `gemini-designer ui`.
 - For UX, component-choice, task-flow, interaction, friction, or state-feedback review, use `gemini-designer ux`.
 - For combined UI + UX review, use `gemini-designer ui,ux` or run `ui` and `ux` separately.
@@ -75,6 +78,7 @@ gemini-designer ui,ux "同时从 UI 和 UX 角度评审这个标签编辑组件"
 gemini-designer direction "给这个产品生成设计意象 markdown" -o product-design-imagery.md
 gemini-designer html "生成一个完整的产品页面设计稿" -f ./brief.md -o ./designs/product-page.html
 gemini-designer svg "为 Museon 生成一个手写 SVG 字标" -o museon-wordmark.svg
+gemini-designer ui "继续收敛上一轮方案" --conversation <conversation-id> -f ./design.html -o design-page-ui-v2.md
 ```
 
 Bare output filenames are saved under `.gemini-designer/` in the current workspace.
@@ -91,4 +95,6 @@ scripts/install_cli
 
 `SKILL.md` tells agents when and how to use Gemini. `scripts/install_cli` installs the CLI into the user's local bin directory. `scripts/gemini-designer` is the command agents call.
 
-The wrapper always invokes `agy` in non-interactive plan mode, pins `gemini-3.7-flash-high` by default, captures JSON output, and keeps generated artifacts under the caller's workspace.
+The wrapper invokes `agy` non-interactively in `accept-edits` mode with terminal sandboxing enabled, explicitly adds the caller's current directory as the active workspace, pins `gemini-3.7-flash-high` by default, waits up to 30 minutes, captures JSON output and its conversation ID, and keeps generated artifacts under the caller's workspace. This grants automatic reads and edits inside the active workspace without enabling `--dangerously-skip-permissions`; terminal commands remain governed by Antigravity's permission rules and sandbox.
+
+Antigravity CLI and Antigravity 2.0 share the agent harness and settings, but headless CLI conversations do not currently appear automatically in the desktop conversation list. The official CLI can resume one with `agy --conversation <id>`; it does not currently expose a supported headless flag for exporting or opening that CLI conversation in the desktop client.
