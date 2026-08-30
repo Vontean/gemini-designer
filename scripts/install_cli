@@ -13,32 +13,19 @@ ln -sfn "$share_dir/gemini-designer" "$bin_dir/gemini-designer"
 
 config_path="$config_dir/config.toml"
 if [[ ! -f "$config_path" ]]; then
-  if [[ "$config_dir" == "$HOME/.config/gemini-designer" ]]; then
-    api_key_file='~/.config/gemini-designer/api_key'
-  else
-    api_key_file="$config_dir/api_key"
-  fi
   umask 077
   {
-    printf '%s\n' 'base_url = "https://zenmux.ai/api/v1"'
-    printf '%s\n' 'model = "google/gemini-3.1-pro-preview"'
-    printf 'api_key_file = "%s"\n' "$api_key_file"
+    printf '%s\n' 'model = "gemini-3.7-flash-high"'
+    printf '%s\n' 'print_timeout = "5m"'
     printf '%s\n' 'output_dir = ".gemini-designer"'
     printf '%s\n' 'max_chars = 260000'
-    printf '%s\n' 'max_image_bytes = 8000000'
-    printf '%s\n' 'image_optimize = true'
-    printf '%s\n' 'image_format = "webp"'
-    printf '%s\n' 'image_webp_lossless = true'
-    printf '%s\n' 'image_webp_quality = 86'
-    printf '%s\n' 'image_max_long_edge = 2200'
   } > "$config_path"
-fi
-
-if [[ -f "$config_dir/api_key" ]]; then
-  chmod 600 "$config_dir/api_key"
 fi
 
 echo "installed_path=$bin_dir/gemini-designer"
 if ! command -v gemini-designer >/dev/null 2>&1; then
   echo "path_warning=$bin_dir is not on PATH"
+fi
+if ! command -v agy >/dev/null 2>&1; then
+  echo "dependency_warning=Google Antigravity CLI (agy) is not on PATH"
 fi

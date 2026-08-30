@@ -1,44 +1,53 @@
 # Gemini Designer
 
-Gemini Designer is a design advisor skill for agents. It helps with UI critique, UX critique, component-choice review, interaction-flow review, design direction, HTML mockups, SVG icons, handwritten wordmarks, and file-based design feedback.
+Gemini Designer is a Gemini 3.7 Flash design advisor skill for agents. It helps with UI critique, UX critique, component-choice review, interaction-flow review, design direction, HTML mockups, SVG icons, handwritten wordmarks, and file-based design feedback.
 
-The skill asks Gemini for design judgment through the bundled `gemini-designer` CLI, then lets the main agent decide how to apply the advice in the current workspace.
+The skill asks Gemini 3.7 Flash for design judgment through the official Google Antigravity CLI (`agy`), then lets the main agent decide how to apply the advice in the current workspace. It does not call ZenMux, OpenCodex, or a provider API directly.
 
 ## Install
 
 The easiest way is to give this GitHub repository to an agent such as Codex, Claude Code, or Cursor and ask it to install the skill:
 
 ```text
-https://github.com/oil-oil/gemini-designer
+https://github.com/Vontean/gemini-designer
 ```
 
 You can also install it directly from a terminal:
 
 ```bash
-npx skills add oil-oil/gemini-designer
+npx skills add Vontean/gemini-designer
 ```
 
 After installation, agents should use the `gemini-designer` skill when a task needs external design judgment.
 
-## Authorization
+## Requirement and authorization
 
-The CLI reads local configuration from:
+Install and sign in to the official [Google Antigravity CLI](https://antigravity.google/docs/cli/install/). Gemini Designer reuses its local Antigravity session and shared agent harness.
+
+Verify the connection with:
+
+```bash
+agy models
+gemini-designer auth status
+```
+
+Gemini Designer reads its own non-secret defaults from:
 
 ```text
 ~/.config/gemini-designer/config.toml
 ```
 
-By default, the API key is read from:
+The default model is:
 
 ```text
-~/.config/gemini-designer/api_key
+gemini-3.7-flash-high
 ```
 
-Do not commit API keys or local config files. The repository ignores common local secret files, including `.env`, `config.toml`, and `api_key`.
+Authentication remains owned by Antigravity. Gemini Designer does not read, copy, or store API keys or OAuth tokens.
 
 ## What Agents Should Know
 
-- Gemini is stateless. It only sees the current prompt, files passed with `-f`, and images passed with `-i`.
+- Each Gemini Designer call starts a new Antigravity headless run. It receives the current prompt, embedded text files passed with `-f`, and local image paths passed with `-i`.
 - For visual/UI review, use `gemini-designer ui`.
 - For UX, component-choice, task-flow, interaction, friction, or state-feedback review, use `gemini-designer ux`.
 - For combined UI + UX review, use `gemini-designer ui,ux` or run `ui` and `ux` separately.
@@ -46,7 +55,7 @@ Do not commit API keys or local config files. The repository ignores common loca
 - For new standalone HTML mockups, use `gemini-designer html`.
 - For SVG icons, simple illustrations, and single handwritten wordmarks, use `gemini-designer svg`.
 - Pass complete relevant files when Gemini needs to judge an existing design.
-- Pass screenshots or visual references with `-i` when the visible result or state sequence matters.
+- Pass screenshots or visual references with `-i` when the visible result or state sequence matters. Antigravity inspects them with its local image tools.
 - Do not ask Gemini to patch project files directly. Use its advice, then apply the changes in the workspace.
 
 ## CLI
@@ -81,3 +90,5 @@ scripts/install_cli
 ```
 
 `SKILL.md` tells agents when and how to use Gemini. `scripts/install_cli` installs the CLI into the user's local bin directory. `scripts/gemini-designer` is the command agents call.
+
+The wrapper always invokes `agy` in non-interactive plan mode, pins `gemini-3.7-flash-high` by default, captures JSON output, and keeps generated artifacts under the caller's workspace.

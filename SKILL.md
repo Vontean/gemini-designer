@@ -1,17 +1,17 @@
 ---
 name: gemini-designer
-description: Use Gemini as the required external design advisor when a task needs UI critique, UX critique, component-choice review, interaction-flow review, design imagery markdown, art direction, visual hierarchy judgment, design-system fit, color/type/layout suggestions, HTML mockups, SVG icons, handwritten SVG wordmarks, or file-based feedback on existing UI. Trigger on requests like "design a page", "generate design imagery", "give design advice", "optimize this UI", "improve UX", "optimize user flow", "review interaction", "check usability", "reduce friction", "choose the right component", "review this design", "create an icon", "suggest colors", "UI mockup", "visual direction", "lettering", "wordmark", "handwritten logo", or when another agent needs a second opinion on visual or interaction quality.
+description: Use Gemini 3.7 Flash through the local Google Antigravity agent as the required external design advisor when a task needs UI critique, UX critique, component-choice review, interaction-flow review, design imagery markdown, art direction, visual hierarchy judgment, design-system fit, color/type/layout suggestions, HTML mockups, SVG icons, handwritten SVG wordmarks, or file-based feedback on existing UI. Trigger on requests like "design a page", "generate design imagery", "give design advice", "optimize this UI", "improve UX", "optimize user flow", "review interaction", "check usability", "reduce friction", "choose the right component", "review this design", "create an icon", "suggest colors", "UI mockup", "visual direction", "lettering", "wordmark", "handwritten logo", or when another agent needs a second opinion on visual or interaction quality.
 ---
 
 # Gemini Designer — UI, UX, and Visual Design Advisor
 
-Use Gemini as an external advisor for visual design, UI finish, UX task flow, interaction friction, art direction, and lightweight design artifacts.
+Use Gemini 3.7 Flash through Google Antigravity as an external advisor for visual design, UI finish, UX task flow, interaction friction, art direction, and lightweight design artifacts.
 
 ## Critical rules
 
-- ONLY interact with Gemini through the global `gemini-designer` CLI. Do not call the API or provider-specific scripts directly.
+- ONLY interact with Gemini through the global `gemini-designer` CLI. The wrapper must call the official local Antigravity CLI (`agy`); do not call ZenMux, OpenCodex, or a provider API directly.
 - When this skill is used, call `gemini-designer` before giving UI advice, UX advice, design imagery, art direction, critique, visual advice, HTML, or SVG output. Do not write those deliverables from the agent's own judgment.
-- Call `gemini-designer` directly in the normal path. If the command is missing, install it silently with the bundled `scripts/install_cli` script, then retry.
+- Call `gemini-designer` directly in the normal path. If the command is missing, install it silently with the bundled `scripts/install_cli` script, then retry. If `agy` is missing, report that the official Google Antigravity CLI must be installed and signed in.
 - For visual/UI review of existing files, use `gemini-designer ui`.
 - For UX, task-model, component-choice, interaction-flow, friction, or state-behavior review, use `gemini-designer ux`.
 - For requests that need both UI and UX review, run `ui` and `ux` independently. You may use the CLI's comma-separated form, such as `gemini-designer ui,ux ...`, or run separate commands in parallel.
@@ -31,7 +31,7 @@ Use Gemini as an external advisor for visual design, UI finish, UX task flow, in
 - Pass the user's stated requirements and concrete project context. Do not add the agent's own style labels, layout choices, color choices, metaphor choices, interaction concepts, or evaluation criteria unless the user explicitly said them.
 - Do not pre-design for Gemini. For creative generation, state the user goal, source material, output format, and hard constraints only. Do not name visual directions, metaphors, layouts, palettes, typography, materials, animations, or interaction models unless the user explicitly provided them.
 - For multiple alternatives, ask Gemini for independent, clearly different options. Do not assign the options names like "dashboard direction", "editorial direction", or "radar direction" unless the user gave those directions.
-- The CLI manages its own configuration and authorization. Do not pre-check authorization. If a call fails with `error=not_authorized`, report that Gemini Designer is not authorized.
+- Google Antigravity owns authentication and the shared local agent session. Do not pre-check authorization in the normal path. If a call fails with an Antigravity authorization error, report that Antigravity CLI is not authorized.
 
 ## Gemini CLI
 
@@ -41,7 +41,7 @@ Normal path: call `gemini-designer` directly. Do not run install or auth checks 
 
 If the shell reports `command not found`, resolve `/path/to/this-skill` to the directory containing this `SKILL.md`, run `/path/to/this-skill/scripts/install_cli` silently, then retry the original `gemini-designer` command. If the installer reports a `path_warning`, use the printed `installed_path` for this turn and tell the user that the CLI directory is not on PATH.
 
-If the CLI returns `error=not_authorized`, stop and tell the user Gemini Designer is not authorized. Do not read, copy, print, or manage API keys.
+If the CLI reports an Antigravity authorization failure, stop and tell the user to sign in through Antigravity CLI. Do not read, copy, print, or manage API keys or OAuth tokens.
 
 Each command has its own built-in prompt. Choose the right command and pass the user's task plainly; do not add a cross-command prompt framework, design direction, UX solution, or extra output rules unless the user explicitly gave them.
 
@@ -141,7 +141,7 @@ gemini-designer direction "参考这张图，生成设计意象 markdown" \
   -o product-design-imagery.md
 ```
 
-When images are passed with `-i`, the CLI may internally send an optimized WebP version to Gemini to reduce request size while preserving readable UI detail. Agents should still pass the original screenshot or reference image path.
+When images are passed with `-i`, the wrapper gives Antigravity the original local paths and asks it to inspect them with its local image tools. Agents should pass readable absolute or workspace-relative paths.
 
 Do not pass unrelated source files, build output, dependency folders, logs, or implementation details that do not affect the visual result or user-visible interaction. If the needed context is too large, choose representative design-system files and say in the task text what is missing.
 
@@ -235,7 +235,7 @@ message=<short explanation>
 hint=<next step>
 ```
 
-Follow the `hint` when it is actionable. If `error=not_authorized`, stop and tell the user Gemini Designer is not authorized.
+Follow the `hint` when it is actionable. If Antigravity reports an authorization failure, stop and tell the user Antigravity CLI is not authorized.
 
 For generated HTML/SVG, treat `output_path` plus `integrity=passed` as the normal completeness signal. Do not duplicate CLI checks in the agent unless the user asks for additional browser or visual verification.
 
@@ -250,8 +250,9 @@ For generated HTML/SVG, treat `output_path` plus `integrity=passed` as the norma
 ## Configuration
 
 - The global CLI reads `~/.config/gemini-designer/config.toml`.
-- Image optimization defaults to WebP when supported by the local CLI environment.
-- Agents should not read, copy, or manage API keys.
+- The default model is `gemini-3.7-flash-high`; change the flat `model` value only when the user explicitly wants another Antigravity model slug.
+- The wrapper calls `agy` in non-interactive plan mode and parses its JSON result.
+- Authentication remains owned by Google Antigravity. Agents should not read, copy, or manage API keys or OAuth tokens.
 - Do not check authorization in the normal path. Use `gemini-designer auth status` only when explicitly debugging authorization.
 
 ## When to use

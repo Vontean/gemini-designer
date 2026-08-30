@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import concurrent.futures
 import datetime as dt
 import json
@@ -15,29 +14,23 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from typing import Iterable
-import tomllib
-import urllib.error
-import urllib.request
 import xml.etree.ElementTree as ET
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    tomllib = None
 
 
 CONFIG_DIR = pathlib.Path(
     os.environ.get("GEMINI_DESIGNER_CONFIG_DIR", "~/.config/gemini-designer")
 ).expanduser()
 CONFIG_PATH = CONFIG_DIR / "config.toml"
-DEFAULT_API_KEY_FILE = CONFIG_DIR / "api_key"
-DEFAULT_BASE_URL = "https://zenmux.ai/api/v1"
-DEFAULT_MODEL = "google/gemini-3.1-pro-preview"
+DEFAULT_MODEL = "gemini-3.7-flash-high"
+DEFAULT_PRINT_TIMEOUT = "5m"
 DEFAULT_OUTPUT_DIR = pathlib.Path(".gemini-designer")
 DEFAULT_MAX_CHARS = 260_000
-DEFAULT_MAX_IMAGE_BYTES = 8_000_000
-DEFAULT_IMAGE_OPTIMIZE = True
-DEFAULT_IMAGE_FORMAT = "webp"
-DEFAULT_IMAGE_WEBP_LOSSLESS = True
-DEFAULT_IMAGE_WEBP_QUALITY = 86
-DEFAULT_IMAGE_MAX_LONG_EDGE = 2200
 READABLE_OUTPUT_REQUIRED_COMMANDS = {"ui", "ux", "direction"}
 HTML_FORBIDDEN_PATTERNS = [
     (
@@ -76,7 +69,7 @@ class DesignerArgumentParser(argparse.ArgumentParser):
 COMMON_RULES = """General context:
 
 - You are stateless.
-- You can only see the user goal, file contents, and image contents included in this request.
+- You can only see the user goal, embedded file contents, and local image paths included in this request.
 - Do not assume you know the project, previous conversation, screenshots, design rules, or files that were not provided.
 - Keep independent judgment. Do not flatter the user or add polite praise.
 """
@@ -358,79 +351,77 @@ def require_readable_output(args: argparse.Namespace) -> None:
 
 def load_config() -> dict[str, object]:
     config: dict[str, object] = {
-        "api_key_file": str(DEFAULT_API_KEY_FILE),
-        "base_url": DEFAULT_BASE_URL,
         "model": DEFAULT_MODEL,
+        "print_timeout": DEFAULT_PRINT_TIMEOUT,
         "output_dir": str(DEFAULT_OUTPUT_DIR),
         "max_chars": DEFAULT_MAX_CHARS,
-        "max_image_bytes": DEFAULT_MAX_IMAGE_BYTES,
-        "image_optimize": DEFAULT_IMAGE_OPTIMIZE,
-        "image_format": DEFAULT_IMAGE_FORMAT,
-        "image_webp_lossless": DEFAULT_IMAGE_WEBP_LOSSLESS,
-        "image_webp_quality": DEFAULT_IMAGE_WEBP_QUALITY,
-        "image_max_long_edge": DEFAULT_IMAGE_MAX_LONG_EDGE,
     }
     if CONFIG_PATH.exists():
-        try:
-            data = tomllib.loads(CONFIG_PATH.read_text())
-        except tomllib.TOMLDecodeError as error:
-            fail(
-                "invalid_config",
-                f"Config file is not valid TOML: {CONFIG_PATH}",
-                f"Fix the TOML syntax. Details: {error}",
-            )
+        config_text = CONFIG_PATH.read_text()
+        if tomllib:
+            try:
+                data = tomllib.loads(config_text)
+            except tomllib.TOMLDecodeError as error:
+                fail(
+                    "invalid_config",
+                    f"Config file is not valid TOML: {CONFIG_PATH}",
+                    f"Fix the TOML syntax. Details: {error}",
+                )
+        else:
+            data = parse_flat_config(config_text)
         for key in config:
             if key in data:
                 config[key] = data[key]
     return config
 
 
+def parse_flat_config(config_text: str) -> dict[str, object]:
+    data: dict[str, object] = {}
+    for line_number, raw_line in enumerate(config_text.splitlines(), start=1):
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        match = re.fullmatch(r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:"([^"]*)"|(\d+)|(true|false))', line)
+        if not match:
+            fail(
+                "invalid_config",
+                f"Unsupported TOML syntax at {CONFIG_PATH}:{line_number}",
+                "Use flat string, integer, or boolean values only.",
+            )
+        key, string_value, integer_value, boolean_value = match.groups()
+        if string_value is not None:
+            data[key] = string_value
+        elif integer_value is not None:
+            data[key] = int(integer_value)
+        else:
+            data[key] = boolean_value == "true"
+    return data
+
+
 def resolve_path(value: object) -> pathlib.Path:
     return pathlib.Path(str(value)).expanduser()
 
 
-def config_bool(config: dict[str, object], key: str) -> bool:
-    value = config[key]
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"true", "1", "yes", "on"}:
-            return True
-        if normalized in {"false", "0", "no", "off"}:
-            return False
-    fail(
-        "invalid_config",
-        f"`{key}` must be a boolean.",
-        "Fix ~/.config/gemini-designer/config.toml.",
-    )
-
-
-def config_int(config: dict[str, object], key: str) -> int:
-    try:
-        return int(config[key])
-    except (TypeError, ValueError):
-        fail(
-            "invalid_config",
-            f"`{key}` must be an integer.",
-            "Fix ~/.config/gemini-designer/config.toml.",
-        )
-
-
-def read_api_key(config: dict[str, object]) -> tuple[pathlib.Path, str | None]:
-    key_path = resolve_path(config["api_key_file"])
-    if not key_path.exists():
-        return key_path, None
-    key = key_path.read_text().strip()
-    return key_path, key or None
-
-
 def print_auth_status() -> int:
-    config = load_config()
-    _, key = read_api_key(config)
-    status = "authorized" if key else "missing"
+    agy = shutil.which("agy")
+    if not agy:
+        print("status=missing_cli")
+        return 1
+    try:
+        result = subprocess.run(
+            [agy, "models"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=90,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        print("status=unavailable")
+        return 1
+    status = "authorized" if result.returncode == 0 else "not_authorized"
     print(f"status={status}")
-    return 0 if key else 1
+    print(f"agy_path={agy}")
+    return 0 if result.returncode == 0 else 1
 
 
 def handle_auth(argv: list[str]) -> int:
@@ -475,98 +466,6 @@ def resolve_input_path(path_text: str) -> pathlib.Path:
     return path
 
 
-def image_dimensions(path: pathlib.Path) -> tuple[int, int] | None:
-    sips = shutil.which("sips")
-    if not sips:
-        return None
-    try:
-        result = subprocess.run(
-            [sips, "-g", "pixelWidth", "-g", "pixelHeight", str(path)],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    width = height = None
-    for line in result.stdout.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("pixelWidth:"):
-            width = int(stripped.split(":", 1)[1].strip())
-        elif stripped.startswith("pixelHeight:"):
-            height = int(stripped.split(":", 1)[1].strip())
-    if width and height:
-        return width, height
-    return None
-
-
-def resize_for_long_edge(path: pathlib.Path, max_long_edge: int) -> tuple[int, int] | None:
-    if max_long_edge <= 0:
-        return None
-    dimensions = image_dimensions(path)
-    if not dimensions:
-        return None
-    width, height = dimensions
-    long_edge = max(width, height)
-    if long_edge <= max_long_edge:
-        return None
-    scale = max_long_edge / long_edge
-    return max(1, round(width * scale)), max(1, round(height * scale))
-
-
-def optimize_image_to_webp(
-    path: pathlib.Path,
-    data: bytes,
-    mime: str,
-    config: dict[str, object],
-) -> dict[str, object] | None:
-    if not config_bool(config, "image_optimize"):
-        return None
-    if str(config["image_format"]).strip().lower() != "webp":
-        return None
-    if mime in {"image/webp", "image/gif"}:
-        return None
-    cwebp = shutil.which("cwebp")
-    if not cwebp:
-        return None
-
-    lossless = config_bool(config, "image_webp_lossless")
-    quality = config_int(config, "image_webp_quality")
-    max_long_edge = config_int(config, "image_max_long_edge")
-    with tempfile.TemporaryDirectory(prefix="gemini-designer-image-") as tmpdir:
-        out_path = pathlib.Path(tmpdir) / "optimized.webp"
-        command = [cwebp, "-quiet"]
-        resize = resize_for_long_edge(path, max_long_edge)
-        if resize:
-            command.extend(["-resize", str(resize[0]), str(resize[1])])
-        if lossless:
-            command.append("-lossless")
-        else:
-            command.extend(["-q", str(quality)])
-        command.extend([str(path), "-o", str(out_path)])
-        try:
-            subprocess.run(
-                command,
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            optimized_data = out_path.read_bytes()
-        except (OSError, subprocess.CalledProcessError):
-            return None
-
-    if len(optimized_data) >= len(data) and not resize:
-        return None
-    return {
-        "mime": "image/webp",
-        "data": optimized_data,
-        "optimized": True,
-        "optimized_format": "webp",
-        "resized": bool(resize),
-    }
-
-
 def read_image(path_text: str, config: dict[str, object]) -> dict[str, object]:
     path = resolve_input_path(path_text)
     if not path.exists():
@@ -589,27 +488,11 @@ def read_image(path_text: str, config: dict[str, object]) -> dict[str, object]:
             "Pass PNG, JPEG, WebP, GIF, or another image file with a known extension.",
         )
     resolved_path = path.resolve()
-    data = path.read_bytes()
-    image: dict[str, object] = {
+    return {
         "path": resolved_path,
-        "source_mime": mime,
-        "source_bytes": len(data),
         "mime": mime,
-        "data": data,
-        "optimized": False,
+        "bytes": path.stat().st_size,
     }
-    optimized = optimize_image_to_webp(resolved_path, data, mime, config)
-    if optimized:
-        image.update(optimized)
-    max_image_bytes = config_int(config, "max_image_bytes")
-    sent_bytes = len(image["data"])
-    if sent_bytes > max_image_bytes:
-        fail(
-            "image_too_large",
-            f"Image is too large after optimization: {resolved_path} ({sent_bytes} bytes). Limit: {max_image_bytes} bytes.",
-            "Use a smaller screenshot, pass fewer images, or increase `max_image_bytes` in the config.",
-        )
-    return image
 
 
 def build_files_text(files: Iterable[tuple[pathlib.Path, str]], max_chars: int) -> str:
@@ -639,16 +522,7 @@ def build_files_text(files: Iterable[tuple[pathlib.Path, str]], max_chars: int) 
 def build_image_manifest(images: Iterable[dict[str, object]]) -> str:
     lines = []
     for image in images:
-        source_mime = image.get("source_mime", image["mime"])
-        source_bytes = int(image.get("source_bytes", len(image["data"])))
-        sent_bytes = len(image["data"])
-        if image.get("optimized"):
-            details = f"{source_mime}, {source_bytes} bytes; sent {image['mime']}, {sent_bytes} bytes"
-            if image.get("resized"):
-                details += "; resized"
-            lines.append(f"- {image['path']} ({details})")
-        else:
-            lines.append(f"- {image['path']} ({image['mime']}, {sent_bytes} bytes)")
+        lines.append(f"- {image['path']} ({image['mime']}, {image['bytes']} bytes)")
     return "\n".join(lines)
 
 
@@ -674,7 +548,13 @@ def build_prompt(
             ]
         )
     if images:
-        prompt_parts.extend(["Image context:", build_image_manifest(images)])
+        prompt_parts.extend(
+            [
+                "Image context:",
+                "Use Antigravity's local image tools to inspect every referenced image before answering.",
+                build_image_manifest(images),
+            ]
+        )
 
     prompt_parts.extend(
         [
@@ -897,83 +777,70 @@ def normalize_model_output(content: str, command: str) -> str:
     return strip_code_fence(content) + "\n"
 
 
-def image_content_parts(images: list[dict[str, object]]) -> list[dict[str, object]]:
-    parts = []
-    for image in images:
-        encoded = base64.b64encode(image["data"]).decode("ascii")
-        parts.append(
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:{image['mime']};base64,{encoded}",
-                },
-            }
-        )
-    return parts
-
-
-def user_message_content(prompt: str, images: list[dict[str, object]]) -> object:
-    if not images:
-        return prompt
-    return [{"type": "text", "text": prompt}, *image_content_parts(images)]
-
-
 def request_gemini(
     prompt: str,
     command: str,
     config: dict[str, object],
-    api_key: str,
     images: list[dict[str, object]],
 ) -> str:
-    base_url = str(config["base_url"]).rstrip("/")
-    request = urllib.request.Request(
-        f"{base_url}/chat/completions",
-        data=json.dumps(
-            {
-                "model": str(config["model"]),
-                "messages": [
-                    {"role": "system", "content": system_prompt(command)},
-                    {"role": "user", "content": user_message_content(prompt, images)},
-                ],
-            }
-        ).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=300) as response:
-            body = response.read().decode("utf-8")
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")
+    agy = shutil.which("agy")
+    if not agy:
         fail(
-            "api_http_error",
-            f"Gemini provider returned HTTP {error.code}.",
-            detail[:1000],
+            "missing_antigravity_cli",
+            "Google Antigravity CLI (`agy`) is not installed or not on PATH.",
+            "Install the official CLI from https://antigravity.google/docs/cli/install/ and retry.",
         )
-    except urllib.error.URLError as error:
-        fail(
-            "api_request_failed",
-            f"API request failed: {error.reason}",
-            "Check network access or provider configuration.",
-        )
-
+    full_prompt = f"{system_prompt(command)}\n\n{prompt}"
+    agy_command = [
+        agy,
+        "-p",
+        full_prompt,
+        "--model",
+        str(config["model"]),
+        "--output-format",
+        "json",
+        "--mode",
+        "plan",
+        "--disable-slash-commands",
+        "--print-timeout",
+        str(config["print_timeout"]),
+    ]
+    for image_dir in sorted({str(pathlib.Path(image["path"]).parent) for image in images}):
+        agy_command.extend(["--add-dir", image_dir])
     try:
-        data = json.loads(body)
+        result = subprocess.run(
+            agy_command,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError as error:
+        fail(
+            "antigravity_cli_failed",
+            f"Could not launch Antigravity CLI: {error}",
+            "Check that `agy` is installed and executable.",
+        )
+    try:
+        data = json.loads(result.stdout)
     except json.JSONDecodeError:
         fail(
-            "invalid_api_response",
-            "Provider returned a response that is not valid JSON.",
-            body[:1000],
+            "invalid_antigravity_response",
+            "Antigravity CLI did not return valid JSON.",
+            (result.stderr or result.stdout)[:1000],
         )
-    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    if result.returncode != 0 or data.get("status") != "SUCCESS":
+        fail(
+            "antigravity_run_failed",
+            f"Antigravity run ended with status {data.get('status', 'ERROR')}.",
+            str(data.get("error") or result.stderr or "Run `gemini-designer auth status` to verify the shared Antigravity login.")[:1000],
+        )
+    content = str(data.get("response", ""))
     if not content:
         fail(
-            "empty_api_response",
-            "Provider returned an empty response.",
-            body[:1000],
+            "empty_antigravity_response",
+            "Antigravity returned an empty response.",
+            result.stdout[:1000],
         )
     return normalize_model_output(content, command)
 
@@ -988,13 +855,6 @@ def run_gemini(
     files: list[tuple[pathlib.Path, str]],
     multiple: bool,
 ) -> None:
-    _, api_key = read_api_key(config)
-    if not api_key:
-        fail(
-            "not_authorized",
-            "Gemini Designer is not authorized.",
-            "Run `gemini-designer auth status`. Ask the user to configure authorization outside the agent.",
-        )
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:
@@ -1003,7 +863,7 @@ def run_gemini(
             f"Could not create output directory: {out_path.parent}",
             str(error),
         )
-    content = request_gemini(prompt, command, config, api_key, images)
+    content = request_gemini(prompt, command, config, images)
     content += original_prompt_appendix(command, args, files, images)
     try:
         out_path.write_text(content)
