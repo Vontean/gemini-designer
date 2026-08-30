@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  codex-agy-terminal start [workspace]
+  codex-agy-terminal send <message>
+
+Opens Codex's integrated Terminal through View > Open Terminal, then pastes
+the Agy launch command or a follow-up message into that visible Terminal.
+EOF
+}
+
+shell_quote() {
+  local value=${1//\'/\'"\'"\'}
+  printf "'%s'" "$value"
+}
+
+paste_into_codex_terminal() {
+  local text=$1
+
+  osascript - "$text" <<'APPLESCRIPT'
+on run argv
+  set textToPaste to item 1 of argv
+
+  tell application "System Events"
+    tell first application process whose bundle identifier is "com.openai.codex"
+      set frontmost to true
+      click menu item "Open Terminal" of menu "View" of menu bar item "View" of menu bar 1
+      delay 0.4
+
+      set savedClipboard to missing value
+      try
+        set savedClipboard to the clipboard
+      end try
+
+      set the clipboard to textToPaste
+      keystroke "v" using command down
+      delay 0.2
+      key code 36
+      delay 0.2
+
+      if savedClipboard is not missing value then
+        try
+          set the clipboard to savedClipboard
+        end try
+      end if
+    end tell
+  end tell
+end run
+APPLESCRIPT
+}
+
+command=${1:-}
+case "$command" in
+  start)
+    workspace=${2:-$PWD}
+    launch_command="agy --model gemini-3.7-flash-high --mode accept-edits --sandbox --add-dir $(shell_quote "$workspace")"
+    paste_into_codex_terminal "$launch_command"
+    ;;
+  send)
+    shift
+    if (($# == 0)); then
+      usage >&2
+      exit 2
+    fi
+    paste_into_codex_terminal "$*"
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

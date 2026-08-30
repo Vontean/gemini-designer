@@ -20,7 +20,14 @@ npx skills add Vontean/gemini-designer
 
 After installation, agents should use the `gemini-designer` skill when a task needs external design judgment.
 
-In the Codex desktop app, the primary workflow is a visible interactive Antigravity TUI. Codex opens a Side Panel Terminal, starts `agy` there, and then sends design tasks and follow-up messages through that same live Terminal session. The `gemini-designer` headless wrapper is retained only as a compatibility fallback for environments without an interactive Codex Terminal.
+In the Codex desktop app on macOS, the primary workflow is a visible interactive Antigravity TUI. The bundled helper opens Codex's own integrated Terminal through `View > Open Terminal`, starts `agy` there, and sends design tasks and follow-up messages through that same live Terminal session. The `gemini-designer` headless wrapper is retained only as a compatibility fallback for environments without an interactive Codex Terminal.
+
+```bash
+bash /path/to/gemini-designer/scripts/codex-agy-terminal start "$PWD"
+bash /path/to/gemini-designer/scripts/codex-agy-terminal send "评审当前页面的 UI 和 UX"
+```
+
+The helper uses macOS Accessibility automation to focus the real Codex Terminal and restores the clipboard after pasting. It deliberately does not attach an `exec_command` PTY session ID: tool PTYs and Codex App Terminal sessions use different ID spaces.
 
 ```bash
 agy --model gemini-3.7-flash-high --mode accept-edits --sandbox --add-dir "$PWD"
@@ -96,10 +103,11 @@ For multi-command markdown review, a single `-o` value is suffixed per command. 
 ```text
 SKILL.md
 scripts/gemini-designer
+scripts/codex-agy-terminal
 scripts/install_cli
 ```
 
-`SKILL.md` tells agents when and how to use Gemini. `scripts/install_cli` installs the CLI into the user's local bin directory. `scripts/gemini-designer` is the command agents call.
+`SKILL.md` tells agents when and how to use Gemini. `scripts/codex-agy-terminal` drives the visible Codex Terminal on macOS. `scripts/install_cli` installs the compatibility CLI into the user's local bin directory. `scripts/gemini-designer` is the fallback command agents call.
 
 The wrapper invokes `agy` non-interactively in `accept-edits` mode with terminal sandboxing enabled, explicitly adds the caller's current directory as the active workspace, pins `gemini-3.7-flash-high` by default, waits up to 30 minutes, renders its event stream as readable live Terminal progress, captures the final output and conversation ID, and keeps generated artifacts under the caller's workspace. This grants automatic reads and edits inside the active workspace without enabling `--dangerously-skip-permissions`; terminal commands remain governed by Antigravity's permission rules and sandbox.
 

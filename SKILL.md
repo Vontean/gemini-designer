@@ -10,7 +10,8 @@ Use Gemini 3.7 Flash through Google Antigravity as an external advisor for visua
 ## Critical rules
 
 - In the Codex desktop app, interact with Gemini through a visible, interactive Antigravity CLI (`agy`) running inside a Side Panel Terminal. Do not use the headless `gemini-designer` wrapper as the normal Codex path.
-- Open the Side Panel Terminal first. In that exact Terminal, start `agy` with the current workspace, `gemini-3.7-flash-high`, `accept-edits`, and sandbox enabled. Only after the Antigravity TUI is visible and ready should Codex send the design task through the same Terminal session.
+- Open Codex's own integrated Terminal through `View > Open Terminal`. Do not pass an `exec_command` PTY session ID to `open_in_codex`: Codex App Terminal IDs and tool PTY IDs are different session types and cannot be attached to each other.
+- In that exact visible Terminal, start `agy` with the current workspace, `gemini-3.7-flash-high`, `accept-edits`, and sandbox enabled. Only after the Antigravity TUI is visible and ready should Codex send the design task through the same Terminal session.
 - Keep the interactive `agy` process alive while the design task is active. Send refinements, corrections, implementation follow-ups, and related design questions into that same Terminal session so Gemini retains the thread context.
 - Start a new interactive `agy` session for an unrelated design goal, a deliberately independent alternative, or a clean-slate review. If a relevant session was closed, resume its exact conversation ID instead of using the workspace's ambiguous most-recent conversation.
 - When this skill is used, ask the interactive Agy session before giving UI advice, UX advice, design imagery, art direction, critique, visual advice, HTML, or SVG output. Do not replace Gemini's design judgment with the Codex agent's own judgment.
@@ -36,10 +37,16 @@ Use Gemini 3.7 Flash through Google Antigravity as an external advisor for visua
 
 ## Codex Side Panel workflow
 
-The Codex desktop path is an interactive terminal workflow, not a headless subprocess workflow.
+The Codex desktop path is an interactive terminal workflow, not a headless subprocess workflow. On macOS, use the bundled `scripts/codex-agy-terminal` helper. It activates Codex, chooses `View > Open Terminal`, pastes into the focused integrated Terminal, submits the input, and restores the user's clipboard.
 
-1. Create a PTY-backed Terminal in the current Codex task and open it in the Side Panel.
-2. In that Terminal, run:
+1. Resolve `/path/to/this-skill` to the directory containing this `SKILL.md`.
+2. Start Agy in Codex's visible integrated Terminal:
+
+```bash
+bash /path/to/this-skill/scripts/codex-agy-terminal start "$PWD"
+```
+
+This is equivalent to opening `View > Open Terminal` and entering:
 
 ```bash
 agy \
@@ -49,15 +56,21 @@ agy \
   --add-dir "$PWD"
 ```
 
-3. Wait until the Antigravity TUI shows the signed-in account, model, workspace, and prompt input.
-4. Send the design task through that same Terminal session. Keep the task close to the user's wording and include relevant paths or images.
+3. Wait until the Antigravity TUI shows the signed-in account, model, workspace, and prompt input. Verify the visible Terminal itself; a successful shell command alone is not proof that the TUI is attached.
+4. Send the design task through that same Terminal session. Keep the task close to the user's wording and include relevant paths or images:
+
+```bash
+bash /path/to/this-skill/scripts/codex-agy-terminal send "<design task>"
+```
+
+Use the helper only after the Agy prompt is ready. It focuses Codex's integrated Terminal before pasting, so do not use it while another Codex Terminal should receive input.
 5. Observe Agy's reasoning status, tool calls, permission requests, edits, and response directly in the Side Panel Terminal.
-6. For a follow-up on the same design, send another message to the same running Agy session. Do not relaunch Agy and do not reconstruct the earlier context.
+6. For a follow-up on the same design, call the helper's `send` command again. Do not relaunch Agy and do not reconstruct the earlier context.
 7. For HTML, SVG, or another file artifact, tell Agy the exact workspace output path and let it create the file under `accept-edits`; then read that file from Codex.
 8. For advisory UI, UX, or direction work, read the completed Agy response from the Terminal and synthesize it for the user.
 9. Leave the Agy process running while more iterations are expected. When closing it, retain the exact resume command or conversation ID shown by Agy.
 
-If the Side Panel cannot attach the Terminal, do not silently fall back while claiming the run is visible. Tell the user that the Codex Terminal is not attached, then use the compatibility fallback only if continuing without the visible TUI is acceptable.
+If macOS denies Accessibility control, or the Codex Terminal does not become visible, do not silently fall back while claiming the run is visible. Tell the user exactly which condition failed, then use the compatibility fallback only if continuing without the visible TUI is acceptable.
 
 ## Compatibility fallback CLI
 
